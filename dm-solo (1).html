@@ -335,7 +335,7 @@
   <h2>デッキを入力</h2>
   <p>
     各ゾーンの欄にカード名リストを貼り付けてください。1行に1種類。<br>
-    「<b>4 カード名</b>」「<b>カード名 x4</b>」の形が使えます。文明（色）は「<b>カード名 [火]</b>」「<b>カード名 [火/闇/光]</b>」のように <b>[ ]</b> で。
+    「<b>4 カード名</b>」「<b>カード名 x4</b>」の形が使えます。文明（色）は「<b>カード名 [火]</b>」「<b>カード名 [火闇光]</b>」のように <b>[ ]</b> で。
     テキストも付けるなら「<b>カード名 [火] || テキスト</b>」。
   </p>
   <div class="note" style="margin:12px 0">
@@ -355,7 +355,7 @@
   <textarea id="taHyper" style="min-height:90px" spellcheck="false"></textarea>
   <div class="btn-grid">
     <button class="primary" id="btnStart">このデッキで始める</button>
-    <button id="btnSaveDeck">名前を付けて保存</button>
+    <button id="btnSaveDeck">ーーーー</button>
     <button id="btnSample">サンプルデッキを入れる</button>
   </div>
   <div class="note" style="margin:12px 0">
@@ -364,9 +364,9 @@
   </div>
   <p class="note" style="margin-top:14px">
     ※ 操作方法：<b>1回タップ</b>＝テキスト表示（シールドは中身確認）／<b>2回タップ</b>＝タップ・アンタップ／
-    <b>長押し</b>＝裏返す／<b>押しながらスライド</b>＝移動<br>
+    <b>長押し！バグるので長押しNG！</b>＝裏返す／<b>押しながらスライド</b>＝移動<br>
     ※ バトルゾーンのカードに別のカードを重ねると「上に重ねる／一番下に置く／封印」を選べます。山札など裏向きのカードを重ねると封印になります。<br>
-    ※ メインデッキに「禁断〜封印されしX〜」「FORBIDDEN STAR」「零龍」を含めると、初期配置で自動的にバトルゾーンへ置かれます。
+    ※ メインデッキにドキンダム・ドルマゲ・零龍を含めると、初期配置で自動的にバトルゾーンへ置かれます。！未実装！
   </p>
 </div>
 
@@ -468,10 +468,10 @@ function buildCards(){
 
 /* ============ 初期配置 ============ */
 function isStartInBattle(name){
-  return /禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name) || /零龍/.test(name);
+  return /ドキンダムX/.test(name) || /ドルマゲドンX/.test(name) || /零龍/.test(name);
 }
 function needsSixSeals(name){
-  return /禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name);
+  return /ドキンダムX//.test(name) ;
 }
 function initialSetup(){
   const built = buildCards();
