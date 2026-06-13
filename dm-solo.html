@@ -1,0 +1,2315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DM 一人回しシミュレーター</title>
+<style>
+  :root{
+    --bg:#0e1726;
+    --bg2:#0a111d;
+    --line:rgba(255,255,255,.13);
+    --txt:#e8ecf4;
+    --sub:#93a0b8;
+    --accent:#ff8a2a;
+    --accent2:#3fb6ff;
+    --cw:28px;
+    --ch:39px;
+    --card-face:#f6f1e3;
+    --card-ink:#23202c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:radial-gradient(120% 90% at 50% 0%, #16243b 0%, var(--bg) 45%, var(--bg2) 100%);
+    color:var(--txt);
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif;
+    overscroll-behavior:none;
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:manipulation;
+    display:flex; flex-direction:column;
+  }
+  header{
+    padding:6px 8px 4px;
+    display:flex; flex-wrap:wrap; gap:5px; align-items:center;
+    border-bottom:1px solid var(--line);
+    background:rgba(8,13,22,.6);
+  }
+  header h1{
+    font-size:12px; margin:0 6px 0 0; letter-spacing:.14em;
+    color:var(--accent); font-weight:700; white-space:nowrap;
+  }
+  button{
+    font:inherit; font-size:11px; color:var(--txt);
+    background:#1b2a42; border:1px solid var(--line); border-radius:7px;
+    padding:6px 9px; cursor:pointer;
+  }
+  button:active{background:#27395a;}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#1a0d00; font-weight:700;}
+  button.small{font-size:10px; padding:4px 7px;}
+  button:focus-visible{outline:2px solid var(--accent2); outline-offset:1px;}
+  .size-ctl{display:flex; align-items:center; gap:3px; font-size:10px; color:var(--sub);}
+  .size-ctl input{width:72px;}
+
+  main{flex:1; display:flex; flex-direction:column; min-height:0;}
+
+  .zone-label{
+    position:absolute; top:2px; left:6px;
+    font-size:9px; letter-spacing:.18em; color:var(--sub);
+    pointer-events:none; z-index:0;
+  }
+
+  /* ===== バトルゾーン + 山札サイド ===== */
+  .table-row{display:flex; min-height:0; flex:1 1 40%;}
+  #battleZone{
+    position:relative; flex:1; min-width:0;
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+    background:repeating-linear-gradient(45deg, rgba(255,255,255,.015) 0 12px, transparent 12px 24px);
+  }
+  aside.piles{
+    width:72px; flex:none;
+    border-left:1px solid var(--line); border-bottom:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center;
+    gap:4px; padding:4px 4px 6px;
+    background:rgba(8,13,22,.45);
+    overflow-y:auto;
+  }
+  .drop-strip{
+    width:60px; height:22px; flex:none;
+    border:1px dashed rgba(255,255,255,.3); border-radius:6px;
+    font-size:9px; color:var(--sub);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pile{
+    position:relative; width:var(--cw); height:var(--ch); flex:none;
+    border-radius:5px; min-width:28px; min-height:39px;
+  }
+  .pile .count{
+    position:absolute; right:-7px; bottom:-6px;
+    background:var(--accent); color:#1a0d00; font-size:10px; font-weight:700;
+    border-radius:9px; padding:1px 5px; z-index:2;
+  }
+  .pile-name{font-size:9px; color:var(--sub); letter-spacing:.12em;}
+
+  /* ===== カード ===== */
+  .card{
+    width:var(--cw); height:var(--ch);
+    border-radius:4px;
+    position:relative;
+    flex:none;
+    box-shadow:0 1px 3px rgba(0,0,0,.5);
+    transition:transform .12s ease;
+  }
+  .card.faceup{
+    background:var(--card-face);
+    border:1px solid #b9ad8e;
+  }
+  .card.faceup .cname{
+    position:absolute; inset:2px;
+    font-size:max(6px, calc(var(--cw) * 0.18));
+    line-height:1.12; font-weight:600;
+    color:var(--card-ink);
+    overflow:hidden; word-break:break-all;
+  }
+  .card.facedown{
+    background:repeating-linear-gradient(135deg, #2c2547 0 5px, #241e3a 5px 10px);
+    border:1px solid #4a4070;
+  }
+  .card.facedown::after{
+    content:""; position:absolute; inset:0; margin:auto;
+    width:40%; height:28%; border-radius:50%;
+    border:2px solid rgba(255,255,255,.28);
+  }
+  .card.tapped{transform:rotate(90deg);}
+  .card.tapped.faceup{filter:brightness(.85);}
+  .drag-src{opacity:.25; pointer-events:none;}
+
+  /* バトルゾーンのスタック */
+  .stack{position:absolute; z-index:1;}
+  .stack-top{position:relative;}
+  .stack-unders{display:flex; gap:2px; margin-top:3px;}
+  .stack-unders .card{
+    width:calc(var(--cw) * .78);
+    height:calc(var(--ch) * .78);
+  }
+  /* 封印：上に鉛直方向に重ねるだけ */
+  .seals{position:absolute; left:0; top:0; z-index:3; pointer-events:none;}
+  .seals .card{
+    position:absolute; pointer-events:auto;
+    transform:rotate(10deg);
+    box-shadow:0 2px 5px rgba(0,0,0,.7);
+  }
+  .seals .card.tapped{transform:rotate(100deg);}
+  .seal-mark{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:max(7px, calc(var(--cw)*0.24)); color:#ffd97a; font-weight:700;
+    text-shadow:0 1px 2px #000; z-index:1; pointer-events:none;
+  }
+
+  /* ===== シールド ===== */
+  #shieldZone{
+    position:relative;
+    min-height:calc(var(--ch) + 26px);
+    max-height:34vh;
+    display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;
+    padding:14px 8px 8px;
+    border-bottom:1px solid var(--line);
+    overflow-y:auto;
+  }
+  .shieldstack{position:relative; flex:none;}
+  .shieldstack .scount{
+    position:absolute; right:-7px; top:-7px;
+    background:var(--accent2); color:#04121f; font-size:9px; font-weight:700;
+    border-radius:8px; padding:1px 4px; z-index:2; pointer-events:none;
+  }
+
+  /* ===== マナ・墓地 ===== */
+  .mg-row{display:flex; min-height:0; flex:0 0 auto;}
+  .mg-zone{
+    position:relative; flex:1; min-width:0;
+    min-height:calc(var(--ch) + 22px); max-height:32vh;
+    padding:14px 6px 6px;
+    display:flex; flex-wrap:wrap; gap:4px; align-content:flex-start;
+    overflow-y:auto;
+    border-bottom:1px solid var(--line);
+  }
+  #manaZone{border-right:1px solid var(--line); background:rgba(40,80,40,.10);}
+  #graveZone{background:rgba(80,40,60,.10);}
+
+  /* ===== 手札 ===== */
+  #handZone{
+    position:relative;
+    min-height:calc(var(--ch) + 22px);
+    padding:14px 8px 8px;
+    display:flex; flex-wrap:wrap; gap:5px; align-content:flex-start;
+    overflow-y:auto;
+    flex:1 1 auto;
+    background:rgba(255,255,255,.02);
+  }
+
+  /* ===== ゴースト ===== */
+  #ghost{
+    position:fixed; z-index:999; pointer-events:none;
+    transform:translate(-50%,-65%) scale(1.08);
+    filter:drop-shadow(0 6px 10px rgba(0,0,0,.6));
+    display:none;
+  }
+  #ghost .badge{
+    position:absolute; top:-9px; right:-9px;
+    background:var(--accent2); color:#04121f; font-size:10px; font-weight:700;
+    border-radius:9px; padding:1px 5px;
+  }
+
+  /* ===== モーダル ===== */
+  #overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:flex-end; justify-content:center;
+    z-index:1000;
+  }
+  #overlay.show{display:flex;}
+  #modal{
+    width:100%; max-width:520px; max-height:82vh;
+    background:#141f33; border:1px solid var(--line);
+    border-radius:14px 14px 0 0;
+    padding:14px 14px 18px;
+    overflow-y:auto;
+  }
+  #modal h2{font-size:14px; margin:0 0 8px; color:var(--accent);}
+  #modal .cardtext{
+    font-size:12px; line-height:1.6; color:var(--txt);
+    background:rgba(255,255,255,.05); border-radius:8px;
+    padding:8px; margin:8px 0; white-space:pre-wrap;
+  }
+  .btn-grid{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .modal-cards{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .modal-cards .card{width:64px; height:90px; cursor:pointer;}
+  .modal-cards .card.faceup .cname{font-size:9px;}
+  .card.hasart{background-size:cover !important; background-position:center;}
+  .card.hasart .cname{
+    inset:auto 0 0 0;
+    background:rgba(255,255,255,.82);
+    font-size:max(5.5px, calc(var(--cw)*0.13));
+    padding:1px 2px;
+    border-radius:0 0 4px 4px;
+    max-height:42%;
+  }
+  .deck-list{margin-top:8px;}
+  .deck-item{
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+    padding:6px 0; border-bottom:1px solid rgba(255,255,255,.07);
+  }
+  .deck-item .nm{flex:1; font-size:12px; min-width:80px; overflow:hidden; text-overflow:ellipsis;}
+  .deck-item .pos{font-size:10px; color:var(--sub); width:20px; flex:none;}
+  .num-input{
+    width:64px; font:inherit; font-size:13px;
+    background:#0d1626; color:var(--txt);
+    border:1px solid var(--line); border-radius:6px; padding:5px;
+  }
+
+  /* ===== デッキ入力画面 ===== */
+  #setup{
+    position:fixed; inset:0; z-index:1100;
+    background:var(--bg2); overflow-y:auto;
+    padding:16px; display:none;
+  }
+  #setup.show{display:block;}
+  #setup h2{color:var(--accent); font-size:16px; letter-spacing:.1em;}
+  #setup p{font-size:12px; color:var(--sub); line-height:1.7;}
+  #setup input[type=text]{
+    width:100%; font:inherit; font-size:13px;
+    background:#0d1626; color:var(--txt);
+    border:1px solid var(--line); border-radius:8px; padding:8px;
+  }
+  #setup textarea{
+    width:100%; min-height:160px;
+    background:#0d1626; color:var(--txt);
+    border:1px solid var(--line); border-radius:8px;
+    font-size:13px; padding:8px; font-family:inherit;
+  }
+  #setup label{font-size:12px; color:var(--txt); display:block; margin:14px 0 4px; font-weight:700;}
+  .note{font-size:11px; color:var(--sub); background:rgba(255,255,255,.04); border-radius:8px; padding:8px; line-height:1.7;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DM 一人回し</h1>
+  <button class="primary" id="btnSetup2">初期配置</button>
+  <button id="btnShuffle">シャッフル</button>
+  <button id="btnDraw">ドロー</button>
+  <button id="btnMana">マナ加速</button>
+  <button id="btnViewDeck">山札を見る</button>
+  <button id="btnDeckEdit" class="small">デッキ変更</button>
+  <span class="size-ctl">カード<input type="range" id="sizeRange" min="22" max="64" value="28"></span>
+</header>
+
+<main>
+  <div class="table-row">
+    <section id="battleZone" data-drop="battle">
+      <span class="zone-label">バトルゾーン</span>
+    </section>
+    <aside class="piles">
+      <div class="drop-strip" data-drop="decktop">▲ 山札の上</div>
+      <div class="pile" id="deckPile"></div>
+      <div class="pile-name">山札</div>
+      <div class="drop-strip" data-drop="deckbottom">▼ 山札の下</div>
+      <div style="height:6px"></div>
+      <div class="drop-strip" data-drop="grbottom">超GRの下</div>
+      <div class="pile" id="grPile"></div>
+      <div class="pile-name">超GR</div>
+      <button class="small" id="btnGR">GR召喚</button>
+      <div style="height:6px"></div>
+      <div class="drop-strip" data-drop="hyper">超次元へ</div>
+      <div class="pile" id="hyperPile"></div>
+      <div class="pile-name">超次元</div>
+    </aside>
+  </div>
+
+  <section id="shieldZone" data-drop="shield">
+    <span class="zone-label">シールド</span>
+  </section>
+
+  <div class="mg-row">
+    <section class="mg-zone" id="manaZone" data-drop="mana">
+      <span class="zone-label">マナゾーン</span>
+    </section>
+    <section class="mg-zone" id="graveZone" data-drop="grave">
+      <span class="zone-label">墓地</span>
+    </section>
+  </div>
+
+  <section id="handZone" data-drop="hand">
+    <span class="zone-label">手札</span>
+  </section>
+</main>
+
+<div id="ghost"></div>
+
+<div id="overlay">
+  <div id="modal"></div>
+</div>
+
+<div id="setup" class="show">
+  <h2>デッキを入力</h2>
+  <p>
+    デッキメーカーなどで作ったデッキの<strong>カード名リスト</strong>を貼り付けてください。<br>
+    1行に1種類。「<b>4 カード名</b>」「<b>カード名 x4</b>」「<b>カード名</b>（1枚）」の形が使えます。<br>
+    文明（カードの色）は「<b>4 カード名 [火]</b>」「<b>4 カード名 [火/闇/光]</b>」のように <b>[ ]</b> で書きます（光・水・闇・火・自然・ゼロ）。<br>
+    カードテキストも付けたい場合は「<b>4 カード名 [火] || テキスト</b>」のように <b>||</b> のあとに書きます。
+  </p>
+  <div class="note" style="margin:12px 0;border:1px solid var(--accent)">
+    <b>ページまるごと貼り付けで取り込む（おすすめ・最短）</b><br>
+    デッキメーカーやガチまとめでデッキを表示 → 画面を長押しして「すべて選択」→ コピー →
+    下に貼り付けて「取り込む」。余計な文字が混ざっていても、カードの行だけ自動で抜き出します。<br>
+    <textarea id="taSmart" style="min-height:80px;margin-top:6px" spellcheck="false" placeholder="ここにページの文字を丸ごと貼り付け"></textarea>
+    <span style="display:inline-flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      <button class="small primary" id="btnSmart">取り込む</button>
+      <button class="small" id="btnCivFill">文明を自動補完（覚えた分）</button>
+    </span>
+    <div id="smartStatus" style="margin-top:4px;color:var(--accent2)"></div>
+    <div style="margin-top:4px">※ 文明は、デッキ開始時に [火] などのタグ付きで始めたカードを端末が記憶し、次回から自動で付けます。</div>
+  </div>
+  <div class="note" style="margin:12px 0">
+    <b>ファイルから読み込む</b>（デッキCSV/TXT・公式シートPDF・スクショ画像）<br>
+    <input type="file" id="pdfInput" accept=".csv,.txt,text/plain,text/csv,application/pdf,image/*" style="margin-top:6px;color:var(--txt)">
+    <div id="pdfStatus" style="margin-top:4px;color:var(--accent2)"></div>
+    <div style="margin-top:4px">※ <b>一番確実なのはデッキCSV/TXT</b>です（通信不要・どの環境でも動きます）。公式シートのPDFや画像をClaudeに送ると、この形式に変換してもらえます。PDF・画像を直接選んだ場合は、まずAIによる読み取りを試し、使えない環境では文字認識（OCR）に切り替えます（OCRは通信が必要・初回は認識辞書のダウンロードあり）。</div>
+  </div>
+  <div class="note" style="margin:12px 0">
+    <b>デッキ画像からカードの絵を読み込む</b><br>
+    <span style="display:inline-flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">
+      <input id="shareUrlInput" placeholder="共有URLを貼り付け"
+        style="font:inherit;font-size:12px;background:#0d1626;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px;width:200px">
+      <button class="small" id="btnImgLink">画像リンクを作る</button>
+      <a id="imgLink" target="_blank" rel="noopener" style="color:var(--accent2);font-size:12px;display:none">デッキ画像を開く（長押しで保存）</a>
+    </span><br>
+    <input type="file" id="imgInput" accept="image/*" style="margin-top:8px;color:var(--txt)">
+    <div id="imgStatus" style="margin-top:4px;color:var(--accent2)"></div>
+    <div style="margin-top:4px">※ 先にデッキリストを上の欄に用意してから、保存した画像を選んでください。リストと画像の並び順が同じであることが前提です。絵はこの起動中のみ有効（保存されません）。カード画像は著作物なので、個人の一人回し用途に留めてください。</div>
+  </div>
+  <div class="note" style="margin:12px 0">
+    <b>デッキの保存／読み込み</b><br>
+    <span style="display:inline-flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">
+      <input id="deckNameInput" placeholder="デッキ名"
+        style="font:inherit;font-size:13px;background:#0d1626;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px;width:180px">
+      <button class="small" id="btnSaveDeck">下の内容で保存</button>
+    </span>
+    <div id="savedList" style="margin-top:8px"></div>
+    <div id="saveNote" style="margin-top:4px"></div>
+  </div>
+  <label>メインデッキ（40枚）</label>
+  <textarea id="taMain" spellcheck="false"></textarea>
+  <label>超GRゾーン（使う場合のみ・12枚）</label>
+  <textarea id="taGR" style="min-height:90px" spellcheck="false"></textarea>
+  <label>超次元ゾーン（使う場合のみ・8枚）</label>
+  <textarea id="taHyper" style="min-height:90px" spellcheck="false"></textarea>
+  <label>デッキ名</label>
+  <input type="text" id="deckName" placeholder="例：赤単 我我我" spellcheck="false">
+  <div class="btn-grid">
+    <button class="primary" id="btnStart">このデッキで始める</button>
+    <button id="btnSaveDeck">名前を付けて保存</button>
+    <button id="btnSample">サンプルデッキを入れる</button>
+  </div>
+  <label>保存済みデッキ</label>
+  <div id="savedList" class="deck-list" style="margin-top:0"></div>
+  <p class="note" style="margin-top:14px">
+    ※ 「名前を付けて保存」したデッキは、この端末のこのブラウザの中に保存されます
+    （別の端末やブラウザには引き継がれません。プレビュー環境では保存できないことがあります）。
+    大事なデッキはメモアプリにも残しておくと安心です。<br>
+    ※ 公式デッキシートのように行頭に「1」「2」…と連番が付いたリストを貼り付けた場合は、
+    番号を枚数ではなく行番号として自動で読み取ります（「〃」「同上」にも対応）。<br>
+    ※ 操作方法：<b>1回タップ</b>＝テキスト表示（シールドは中身の確認）／<b>2回タップ</b>＝タップ・アンタップ／
+    <b>長押し</b>＝裏返す／<b>押しながらスライド</b>＝移動<br>
+    ※ バトルゾーンのカードに別のカードを重ねると「上に重ねる／一番下に置く」を選べます。
+    裏向きのカード（山札の上など）を重ねると<b>封印</b>になります。<br>
+    ※ メインデッキに「禁断～封印されしX～」「FORBIDDEN STAR」「零龍」を含めると、
+    初期配置で自動的にバトルゾーンに置かれます（禁断とFORBIDDEN STARには山札の上から6枚の封印が付きます）。
+  </p>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 状態 ============ */
+let cards = {};            // id -> {id,name,text,faceUp,tapped,origin}
+let nextId = 1;
+let Z = newZones();
+function newZones(){
+  return { deck:[], hand:[], shield:[], mana:[], grave:[], gr:[], hyper:[], battle:[] };
+  // battle : [{id,x,y,cardIds:[先頭が一番上], seals:[封印カードid]}]
+  // shield : [{id, cardIds:[先頭が一番上]}]
+}
+let nextStackId = 1;
+let nextShieldId = 1;
+let deckList = {main:[], gr:[], hyper:[]};
+let deckArt = {main:[], gr:[], hyper:[]};   // 切り出したカード画像(dataURL)を順番に保持
+
+/* ============ ユーティリティ ============ */
+const $ = sel => document.querySelector(sel);
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+function vibrate(ms){ if(navigator.vibrate) navigator.vibrate(ms); }
+function findStack(id){ return Z.battle.find(s=>s.id===id); }
+function findShield(id){ return Z.shield.find(s=>s.id===id); }
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+}
+
+/* ============ 文明カラー ============ */
+const CIV_BG = {"光":"#f4ecc0","水":"#cfe5f7","闇":"#c9c0d6","火":"#f5cfc0","自然":"#cfe3c0","ゼロ":"#e3e3e3"};
+const CIV_BD = {"光":"#cdb247","水":"#3f8fd4","闇":"#6a5a8a","火":"#d45a3f","自然":"#5a9a4a","ゼロ":"#9a9a9a"};
+function applyCivStyle(el, c){
+  const cs = c.civs || [];
+  if(cs.length===0) return;
+  if(cs.length===1){
+    el.style.background = CIV_BG[cs[0]] || "";
+    el.style.borderColor = CIV_BD[cs[0]] || "";
+  }else{
+    const n = cs.length;
+    const segs = cs.map((cv,i)=>`${CIV_BG[cv]||"#eee"} ${Math.round(100*i/n)}% ${Math.round(100*(i+1)/n)}%`).join(", ");
+    el.style.background = `linear-gradient(135deg, ${segs})`;
+    el.style.borderColor = "#c9a23f"; /* 多色はゴールド枠 */
+  }
+}
+
+/* ============ カードサイズ ============ */
+const sizeRange = $("#sizeRange");
+function applySize(){
+  const w = parseInt(sizeRange.value,10);
+  document.documentElement.style.setProperty("--cw", w+"px");
+  document.documentElement.style.setProperty("--ch", Math.round(w*1.4)+"px");
+}
+sizeRange.addEventListener("input", ()=>{ applySize(); relayoutZones(); });
+window.addEventListener("resize", ()=> relayoutZones());
+applySize();
+
+/* ============ デッキ読み込み ============ */
+function parseList(text){
+  const rawLines = text.split("\n").map(l=>l.trim()).filter(l=>l);
+  // 公式デッキシートのような「1 カード名」「2 カード名」… の連番を検出
+  const heads = rawLines.map(l=>{
+    const m = l.match(/^(\d{1,3})[\s.．、:：]+\S/);
+    return m ? parseInt(m[1],10) : null;
+  });
+  const numbered = heads.filter(v=>v!==null);
+  let seq = 0;
+  numbered.forEach((v,i)=>{ if(v===i+1) seq++; });
+  const sheetMode = numbered.length>=5 && seq/numbered.length>0.8;
+
+  const out = [];
+  for(let raw of rawLines){
+    let line = raw;
+    if(sheetMode) line = line.replace(/^\d{1,3}[\s.．、:：]+/,"");
+    // 「〃」「々」「同上」＝直前のカードをもう1枚
+    if(/^([〃々]|同上)$/.test(line)){
+      if(out.length) out[out.length-1].count++;
+      continue;
+    }
+    let cardText = "";
+    const sep = line.indexOf("||");
+    if(sep >= 0){ cardText = line.slice(sep+2).trim(); line = line.slice(0,sep).trim(); }
+    let civs = [];
+    const cm = line.match(/[\[［]([^\]］]+)[\]］]/);
+    if(cm){
+      const tag = cm[1];
+      const defs = [["光","光"],["水","水"],["闇","闇"],["火","火"],["自然","自然"],["自","自然"],["ゼロ","ゼロ"],["無","ゼロ"]];
+      const found = [];
+      for(const [k,v] of defs){
+        const idx = tag.indexOf(k);
+        if(idx>=0 && !found.some(f=>f.v===v)) found.push({v, idx});
+      }
+      found.sort((a,b)=>a.idx-b.idx);
+      civs = found.map(f=>f.v);
+      line = line.replace(cm[0], " ").replace(/\s+/g," ").trim();
+    }
+    let count = 1, name = line;
+    if(!sheetMode){
+      let m = line.match(/^[x×*]?(\d+)\s*[x×*]?\s+(.+)$/);
+      if(m){ count = parseInt(m[1],10); name = m[2].trim(); }
+      else{
+        m = line.match(/^(.+?)\s*[x×*](\d+)$/) || line.match(/^(.+?)\s+(\d+)枚$/);
+        if(m){ name = m[1].trim(); count = parseInt(m[2],10); }
+      }
+    }else{
+      // シート形式では行＝1枚。末尾の「x4」だけは枚数として認める
+      const m = line.match(/^(.+?)\s*[x×*](\d+)$/);
+      if(m){ name = m[1].trim(); count = parseInt(m[2],10); }
+    }
+    if(name) out.push({name, text:cardText, count:Math.max(1,count), civs});
+  }
+  return out;
+}
+function buildCards(){
+  cards = {}; nextId = 1;
+  const artIdx = {main:0, gr:0, hyper:0};
+  const make = (entry, origin) => {
+    const ids = [];
+    for(let i=0;i<entry.count;i++){
+      const id = "c"+(nextId++);
+      const art = (deckArt[origin]||[])[artIdx[origin]++] || null;
+      cards[id] = {id, name:entry.name, text:entry.text, civs:entry.civs||[], art, faceUp:false, tapped:false, origin};
+      ids.push(id);
+    }
+    return ids;
+  };
+  let main = [], gr = [], hyper = [];
+  deckList.main.forEach(e => main.push(...make(e,"main")));
+  deckList.gr.forEach(e => gr.push(...make(e,"gr")));
+  deckList.hyper.forEach(e => hyper.push(...make(e,"hyper")));
+  return {main, gr, hyper};
+}
+
+/* ============ 初期配置 ============ */
+function isStartInBattle(name){
+  return /禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name) || /零龍/.test(name);
+}
+function needsSixSeals(name){
+  return /禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name);
+}
+function initialSetup(){
+  const built = buildCards();
+  Z = newZones();
+  nextStackId = 1; nextShieldId = 1;
+  // 禁断・FORBIDDEN STAR・零龍は開始時からバトルゾーンに置く
+  const specials = [], deckIds = [];
+  for(const id of built.main){
+    if(isStartInBattle(cards[id].name)) specials.push(id);
+    else deckIds.push(id);
+  }
+  Z.deck = shuffle(deckIds);
+  Z.gr   = shuffle(built.gr);
+  Z.hyper = built.hyper;
+  for(const id of Z.hyper){ cards[id].faceUp = true; }
+  const cw = parseInt(sizeRange.value,10);
+  let sx = 8;
+  for(const id of specials){
+    cards[id].faceUp = true; cards[id].tapped = false;
+    addStack([id], sx, 6);
+    const st = Z.battle[Z.battle.length-1];
+    if(needsSixSeals(cards[id].name)){
+      for(let k=0;k<6 && Z.deck.length;k++){
+        const sid = Z.deck.shift();
+        cards[sid].faceUp = false; cards[sid].tapped = false;
+        st.seals.push(sid);
+      }
+    }
+    sx += cw*2 + 28;
+  }
+  for(let i=0;i<5 && Z.deck.length;i++){
+    const id = Z.deck.shift();
+    cards[id].faceUp = false; cards[id].tapped = false;
+    Z.shield.push({id:"sh"+(nextShieldId++), cardIds:[id]});
+  }
+  for(let i=0;i<5 && Z.deck.length;i++){
+    const id = Z.deck.shift();
+    cards[id].faceUp = true; cards[id].tapped = false;
+    Z.hand.push(id);
+  }
+  renderAll();
+}
+
+/* ============ 基本操作 ============ */
+function draw(){
+  if(!Z.deck.length) return;
+  const id = Z.deck.shift();
+  cards[id].faceUp = true; cards[id].tapped = false;
+  Z.hand.push(id);
+  renderAll();
+}
+function manaCharge(){
+  if(!Z.deck.length) return;
+  const id = Z.deck.shift();
+  cards[id].faceUp = true; cards[id].tapped = false;
+  Z.mana.push(id);
+  renderAll();
+}
+function grSummon(){
+  if(!Z.gr.length) return;
+  const id = Z.gr.shift();
+  cards[id].faceUp = true; cards[id].tapped = false;
+  addStack([id], 12 + (Z.battle.length*16)%80, 12 + (Z.battle.length*12)%60);
+  renderAll();
+}
+function addStack(ids, x, y){
+  Z.battle.push({id:"s"+(nextStackId++), x, y, cardIds:ids, seals:[]});
+}
+function addShieldStack(ids, faceDown){
+  for(const id of ids){
+    cards[id].tapped = false;
+    if(faceDown) cards[id].faceUp = false;
+  }
+  Z.shield.push({id:"sh"+(nextShieldId++), cardIds:ids});
+}
+
+/* ============ 移動処理 ============ */
+/* ctx.kind:
+   'zone'(hand/mana/grave) | 'stacktop' | 'under' | 'seal'
+   'shieldstack' | 'shieldcard' | 'deckpile' | 'grpile' */
+function takeFromSource(ctx){
+  if(ctx.kind === "deckpile") return Z.deck.length ? [Z.deck.shift()] : [];
+  if(ctx.kind === "grpile")   return Z.gr.length ? [Z.gr.shift()] : [];
+  if(ctx.kind === "hyperpile") return Z.hyper.length ? [Z.hyper.shift()] : [];
+  if(ctx.kind === "zone"){
+    const arr = Z[ctx.zone];
+    const i = arr.indexOf(ctx.cardId);
+    if(i>=0) arr.splice(i,1);
+    return [ctx.cardId];
+  }
+  if(ctx.kind === "stacktop"){
+    const i = Z.battle.findIndex(s=>s.id===ctx.stackId);
+    if(i<0) return [];
+    const st = Z.battle.splice(i,1)[0];
+    return [...st.cardIds, ...st.seals];
+  }
+  if(ctx.kind === "under" || ctx.kind === "seal"){
+    const st = findStack(ctx.stackId);
+    if(!st) return [];
+    const arr = ctx.kind==="under" ? st.cardIds : st.seals;
+    const i = arr.indexOf(ctx.cardId);
+    if(i>=0) arr.splice(i,1);
+    if(st.cardIds.length===0){
+      // 本体が無くなったら残った封印はそのままスタック解体 → 封印は新しい単独カードに
+      const leftovers = st.seals;
+      Z.battle = Z.battle.filter(s=>s!==st);
+      let off = 0;
+      for(const lid of leftovers){ addStack([lid], st.x+off, st.y+off); off+=10; }
+    }
+    return [ctx.cardId];
+  }
+  if(ctx.kind === "shieldstack"){
+    const i = Z.shield.findIndex(s=>s.id===ctx.shieldId);
+    if(i<0) return [];
+    return Z.shield.splice(i,1)[0].cardIds;
+  }
+  if(ctx.kind === "shieldcard"){
+    const sh = findShield(ctx.shieldId);
+    if(!sh) return [];
+    const i = sh.cardIds.indexOf(ctx.cardId);
+    if(i>=0) sh.cardIds.splice(i,1);
+    if(sh.cardIds.length===0) Z.shield = Z.shield.filter(s=>s!==sh);
+    return [ctx.cardId];
+  }
+  return [];
+}
+/* スタックへの合流用：封印情報を保ったまま取り出す */
+function detachForStack(ctx){
+  if(ctx.kind === "stacktop"){
+    const i = Z.battle.findIndex(s=>s.id===ctx.stackId);
+    if(i<0) return {ids:[], seals:[]};
+    const st = Z.battle.splice(i,1)[0];
+    return {ids:st.cardIds, seals:st.seals};
+  }
+  return {ids: takeFromSource(ctx), seals:[]};
+}
+function enterZone(ids, zone){
+  for(const id of ids){
+    const c = cards[id];
+    c.tapped = false;
+    if(zone==="hand" || zone==="mana" || zone==="grave") c.faceUp = true;
+  }
+}
+function dropTo(ids, dropName, ev){
+  if(!ids.length) return;
+  if(dropName === "battle"){
+    const rect = $("#battleZone").getBoundingClientRect();
+    const cw = parseInt(sizeRange.value,10);
+    let x = ev.clientX - rect.left - cw/2;
+    let y = ev.clientY - rect.top - cw*0.7;
+    x = Math.max(0, Math.min(rect.width-cw-4, x));
+    y = Math.max(0, Math.min(rect.height-cw*1.4-4, y));
+    addStack(ids, x, y);
+  }else if(dropName === "decktop"){
+    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; }
+    Z.deck.unshift(...ids);
+  }else if(dropName === "deckbottom"){
+    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; }
+    Z.deck.push(...ids);
+  }else if(dropName === "grbottom"){
+    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; }
+    Z.gr.push(...ids);
+  }else if(dropName === "hyper"){
+    for(const id of ids){ cards[id].faceUp=true; cards[id].tapped=false; }
+    Z.hyper.push(...ids);
+  }else if(dropName === "shield"){
+    addShieldStack(ids, true);
+  }else if(["hand","mana","grave"].includes(dropName)){
+    enterZone(ids, dropName);
+    Z[dropName].push(...ids);
+  }
+}
+/* バトルスタックへの合流 */
+function applyStackDrop(ctx, stackId, mode){
+  const st = findStack(stackId);
+  if(!st){ renderAll(); return; }
+  const d = detachForStack(ctx);
+  if(!d.ids.length && !d.seals.length){ renderAll(); return; }
+  if(mode === "top"){
+    st.cardIds = [...d.ids, ...st.cardIds];
+    st.seals.push(...d.seals);
+  }else if(mode === "bottom"){
+    st.cardIds = [...st.cardIds, ...d.ids];
+    st.seals.push(...d.seals);
+  }else if(mode === "seal"){
+    const all = [...d.ids, ...d.seals];
+    for(const id of all){ cards[id].faceUp=false; cards[id].tapped=false; }
+    st.seals.push(...all);
+  }
+  renderAll();
+}
+function shouldAutoSeal(ctx){
+  if(ctx.kind === "deckpile" || ctx.kind === "grpile") return true;
+  if(ctx.kind === "seal") return true; // 封印を別のクリーチャーへ移す
+  if(ctx.cardId && cards[ctx.cardId] && !cards[ctx.cardId].faceUp
+     && (ctx.kind==="zone" || ctx.kind==="under" || ctx.kind==="shieldcard")) return true;
+  return false;
+}
+
+/* ============ 描画 ============ */
+function cardEl(id, ctx){
+  const c = cards[id];
+  const el = document.createElement("div");
+  el.className = "card " + (c.faceUp ? "faceup" : "facedown") + (c.tapped ? " tapped" : "");
+  if(c.faceUp){
+    applyCivStyle(el, c);
+    if(c.art){
+      el.classList.add("hasart");
+      el.style.backgroundImage = `url(${c.art})`;
+    }
+    const nm = document.createElement("div");
+    nm.className = "cname";
+    nm.textContent = c.name;
+    el.appendChild(nm);
+  }
+  attachPointer(el, ctx);
+  return el;
+}
+function renderZoneFlex(zone, containerId, labelText){
+  const box = $(containerId);
+  box.innerHTML = `<span class="zone-label">${labelText}（${Z[zone].length}）</span>`;
+  for(const id of Z[zone]){
+    box.appendChild(cardEl(id, {kind:"zone", zone, cardId:id}));
+  }
+}
+function renderBattle(){
+  const bz = $("#battleZone");
+  bz.innerHTML = `<span class="zone-label">バトルゾーン</span>`;
+  for(const st of Z.battle){
+    const wrap = document.createElement("div");
+    wrap.className = "stack";
+    wrap.style.left = st.x + "px";
+    wrap.style.top  = st.y + "px";
+    wrap.dataset.stack = st.id;
+    wrap.setAttribute("data-drop","stack");
+
+    const topBox = document.createElement("div");
+    topBox.className = "stack-top";
+    const topId = st.cardIds[0];
+    topBox.appendChild(cardEl(topId, {kind:"stacktop", stackId:st.id, cardId:topId}));
+
+    // 封印（鉛直方向に重ねる）
+    if(st.seals.length){
+      const sl = document.createElement("div");
+      sl.className = "seals";
+      st.seals.forEach((sid, i)=>{
+        const se = cardEl(sid, {kind:"seal", stackId:st.id, cardId:sid});
+        se.style.left = (4 + i*6) + "px";
+        se.style.top  = (-6 + i*5) + "px";
+        const mk = document.createElement("div");
+        mk.className = "seal-mark"; mk.textContent = "封";
+        se.appendChild(mk);
+        sl.appendChild(se);
+      });
+      topBox.appendChild(sl);
+    }
+    wrap.appendChild(topBox);
+
+    if(st.cardIds.length > 1){
+      const unders = document.createElement("div");
+      unders.className = "stack-unders";
+      for(const uid of st.cardIds.slice(1)){
+        unders.appendChild(cardEl(uid, {kind:"under", stackId:st.id, cardId:uid}));
+      }
+      wrap.appendChild(unders);
+    }
+    bz.appendChild(wrap);
+  }
+}
+function renderShields(){
+  const box = $("#shieldZone");
+  box.innerHTML = `<span class="zone-label">シールド（${Z.shield.length}）</span>`;
+  for(const sh of Z.shield){
+    const wrap = document.createElement("div");
+    wrap.className = "shieldstack";
+    wrap.dataset.shield = sh.id;
+    wrap.setAttribute("data-drop","shieldstack");
+    const topId = sh.cardIds[0];
+    wrap.appendChild(cardEl(topId, {kind:"shieldstack", shieldId:sh.id, cardId:topId}));
+    if(sh.cardIds.length > 1){
+      const b = document.createElement("div");
+      b.className = "scount"; b.textContent = "x"+sh.cardIds.length;
+      wrap.appendChild(b);
+    }
+    box.appendChild(wrap);
+  }
+}
+function renderPiles(){
+  const dp = $("#deckPile");
+  dp.innerHTML = "";
+  if(Z.deck.length){
+    const el = document.createElement("div");
+    el.className = "card facedown";
+    attachPointer(el, {kind:"deckpile"});
+    dp.appendChild(el);
+  }
+  const dc = document.createElement("div");
+  dc.className = "count"; dc.textContent = Z.deck.length;
+  dp.appendChild(dc);
+
+  const gp = $("#grPile");
+  gp.innerHTML = "";
+  if(Z.gr.length){
+    const el = document.createElement("div");
+    el.className = "card facedown";
+    attachPointer(el, {kind:"grpile"});
+    gp.appendChild(el);
+  }
+  const gc = document.createElement("div");
+  gc.className = "count"; gc.textContent = Z.gr.length;
+  gp.appendChild(gc);
+
+  const hp = $("#hyperPile");
+  hp.innerHTML = "";
+  if(Z.hyper.length){
+    hp.appendChild(cardEl(Z.hyper[0], {kind:"hyperpile"}));
+  }
+  const hc = document.createElement("div");
+  hc.className = "count"; hc.textContent = Z.hyper.length;
+  hp.appendChild(hc);
+}
+function renderAll(){
+  renderBattle();
+  renderShields();
+  renderZoneFlex("mana", "#manaZone", "マナゾーン");
+  renderZoneFlex("grave", "#graveZone", "墓地");
+  renderZoneFlex("hand", "#handZone", "手札");
+  renderPiles();
+  relayoutZones();
+}
+
+/* ===== あふれたカードを短辺（横）方向に重ねる =====
+   見えている部分が最小でカード幅の1/3になるまで重ねて詰める */
+function layoutOverlap(sel){
+  const box = document.querySelector(sel);
+  if(!box) return;
+  const items = [...box.children].filter(el =>
+    el.classList.contains("card") || el.classList.contains("shieldstack"));
+  const n = items.length;
+  items.forEach(el => el.style.marginRight = "0px");
+  if(n < 2) return;
+  const cs = getComputedStyle(box);
+  const avail = box.clientWidth
+    - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const cw = items[0].offsetWidth;
+  const gap = parseFloat(cs.columnGap) || 0;
+  if(n*cw + (n-1)*gap <= avail) return;       // 収まっているなら重ねない
+  let m = (avail - cw)/(n-1) - cw - gap;       // 必要な負マージン
+  const maxOverlap = -(cw * 2/3);              // 最大で幅の2/3まで重ねる
+  if(m < maxOverlap) m = maxOverlap;
+  if(m > 0) m = 0;
+  items.forEach((el,i)=>{ if(i < n-1) el.style.marginRight = m + "px"; });
+}
+function relayoutZones(){
+  layoutOverlap("#handZone");
+  layoutOverlap("#manaZone");
+  layoutOverlap("#graveZone");
+  layoutOverlap("#shieldZone");
+}
+
+/* ============ タッチ／ポインタ操作 ============ */
+const ghost = $("#ghost");
+let drag = null;
+let lastTap = {key:"", time:0};
+let pendingSingle = null;
+
+function attachPointer(el, ctx){
+  el.style.touchAction = "none";
+  el.addEventListener("pointerdown", e=>{
+    if(drag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
+    drag = {ctx, el, moved:false, longFired:false,
+            startX:e.clientX, startY:e.clientY,
+            longTimer: setTimeout(()=>{
+              if(drag && !drag.moved){
+                drag.longFired = true;
+                onLongPress(ctx);
+                vibrate(30);
+              }
+            }, 550)};
+  });
+  el.addEventListener("pointermove", e=>{
+    if(!drag || drag.el!==el || drag.longFired) return;
+    const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+    if(!drag.moved && Math.hypot(dx,dy) > 12){
+      drag.moved = true;
+      clearTimeout(drag.longTimer);
+      startGhost(ctx, el);
+    }
+    if(drag.moved){
+      ghost.style.left = e.clientX + "px";
+      ghost.style.top  = e.clientY + "px";
+    }
+  });
+  el.addEventListener("pointerup", e=>{
+    if(!drag || drag.el!==el) return;
+    clearTimeout(drag.longTimer);
+    if(drag.moved){
+      finishDrop(e);
+    }else if(!drag.longFired){
+      handleTap(ctx);
+    }
+    cleanupDrag();
+  });
+  el.addEventListener("pointercancel", ()=>{
+    if(drag){ clearTimeout(drag.longTimer); cleanupDrag(); renderAll(); }
+  });
+}
+function startGhost(ctx, el){
+  ghost.innerHTML = "";
+  const clone = el.cloneNode(true);
+  clone.classList.remove("drag-src");
+  clone.style.position = "static";
+  ghost.appendChild(clone);
+  let total = 0;
+  if(ctx.kind === "stacktop"){
+    const st = findStack(ctx.stackId);
+    if(st) total = st.cardIds.length + st.seals.length;
+  }else if(ctx.kind === "shieldstack"){
+    const sh = findShield(ctx.shieldId);
+    if(sh) total = sh.cardIds.length;
+  }
+  if(total > 1){
+    const b = document.createElement("div");
+    b.className = "badge"; b.textContent = "x"+total;
+    ghost.appendChild(b);
+  }
+  ghost.style.display = "block";
+  el.classList.add("drag-src");
+  const stackEl = el.closest(".stack");
+  if(ctx.kind === "stacktop" && stackEl){
+    stackEl.style.opacity = ".25";
+    stackEl.style.pointerEvents = "none";
+  }
+  const shEl = el.closest(".shieldstack");
+  if(ctx.kind === "shieldstack" && shEl){
+    shEl.style.opacity = ".25";
+    shEl.style.pointerEvents = "none";
+  }
+}
+function finishDrop(e){
+  ghost.style.display = "none";
+  const target = document.elementFromPoint(e.clientX, e.clientY);
+  const dropEl = target ? target.closest("[data-drop]") : null;
+  const ctx = drag.ctx;
+  if(!dropEl){ renderAll(); return; }
+  const name = dropEl.dataset.drop;
+
+  if(name === "stack"){
+    const stackId = dropEl.dataset.stack;
+    if(ctx.kind === "stacktop" && ctx.stackId === stackId){
+      moveOwnStack(e);
+    }else if(shouldAutoSeal(ctx)){
+      applyStackDrop(ctx, stackId, "seal");
+      return;
+    }else{
+      openStackChoice(ctx, stackId);
+      return;
+    }
+  }else if(name === "battle" && ctx.kind === "stacktop"){
+    moveOwnStack(e);
+  }else if(name === "shieldstack"){
+    const sh = findShield(dropEl.dataset.shield);
+    if(sh){
+      if(ctx.kind === "shieldstack" && ctx.shieldId === sh.id){ renderAll(); return; }
+      const ids = takeFromSource(ctx);
+      for(const id of ids){ cards[id].tapped = false; }
+      sh.cardIds.unshift(...ids);  // 重ねたカードが上
+    }
+  }else{
+    const ids = takeFromSource(ctx);
+    dropTo(ids, name, e);
+  }
+  renderAll();
+}
+function moveOwnStack(e){
+  const st = findStack(drag.ctx.stackId);
+  if(!st) return;
+  const rect = $("#battleZone").getBoundingClientRect();
+  const cw = parseInt(sizeRange.value,10);
+  st.x = Math.max(0, Math.min(rect.width-cw-4, e.clientX - rect.left - cw/2));
+  st.y = Math.max(0, Math.min(rect.height-cw*1.4-4, e.clientY - rect.top - cw*0.7));
+  Z.battle = Z.battle.filter(s=>s!==st); Z.battle.push(st);
+}
+function cleanupDrag(){
+  ghost.style.display = "none";
+  drag = null;
+}
+
+/* タップ判定 */
+function handleTap(ctx){
+  const key = ctx.cardId || ctx.shieldId || ctx.kind;
+  const now = Date.now();
+  if(lastTap.key === key && now - lastTap.time < 320){
+    clearTimeout(pendingSingle); pendingSingle = null;
+    lastTap = {key:"", time:0};
+    onDoubleTap(ctx);
+  }else{
+    lastTap = {key, time:now};
+    clearTimeout(pendingSingle);
+    pendingSingle = setTimeout(()=>{ onSingleTap(ctx); }, 320);
+  }
+}
+function onSingleTap(ctx){
+  if(ctx.kind === "deckpile"){ openDeckMenu(); return; }
+  if(ctx.kind === "grpile"){ openGRMenu(); return; }
+  if(ctx.kind === "hyperpile"){ openHyperMenu(); return; }
+  if(ctx.kind === "shieldstack"){
+    const sh = findShield(ctx.shieldId);
+    if(!sh) return;
+    if(sh.cardIds.length > 1){ openShieldModal(ctx.shieldId); }
+    else { openCardModal({kind:"shieldcard", shieldId:ctx.shieldId, cardId:sh.cardIds[0]}); }
+    return;
+  }
+  openCardModal(ctx);
+}
+function onDoubleTap(ctx){
+  if(ctx.kind === "deckpile"){ draw(); return; }
+  if(ctx.kind === "grpile"){ grSummon(); return; }
+  if(ctx.kind === "hyperpile"){ hyperToBattle(Z.hyper[0]); return; }
+  const c = cards[ctx.cardId];
+  if(c){ c.tapped = !c.tapped; renderAll(); }
+}
+function onLongPress(ctx){
+  if(ctx.kind === "deckpile" || ctx.kind === "grpile") return;
+  const c = cards[ctx.cardId];
+  if(c){ c.faceUp = !c.faceUp; renderAll(); }
+}
+
+/* ============ モーダル ============ */
+const overlay = $("#overlay");
+const modal = $("#modal");
+function openModal(html){
+  modal.innerHTML = html;
+  overlay.classList.add("show");
+}
+function closeModal(){ overlay.classList.remove("show"); modal.innerHTML=""; }
+overlay.addEventListener("pointerdown", e=>{ if(e.target===overlay) closeModal(); });
+
+function zoneNameJa(ctx){
+  if(ctx.kind==="stacktop"||ctx.kind==="under") return "バトルゾーン";
+  if(ctx.kind==="seal") return "封印";
+  if(ctx.kind==="shieldcard"||ctx.kind==="shieldstack") return "シールド";
+  return {hand:"手札", mana:"マナゾーン", grave:"墓地"}[ctx.zone] || "";
+}
+function moveButtonsHtml(c){
+  return `<div style="font-size:11px;color:var(--sub);margin-top:12px">移動：</div>
+    <div class="btn-grid">
+      <button data-mv="hand">手札へ</button>
+      <button data-mv="battle">バトルへ</button>
+      <button data-mv="mana">マナへ</button>
+      <button data-mv="grave">墓地へ</button>
+      <button data-mv="shield">シールドへ</button>
+      <button data-mv="decktop">山札の上へ</button>
+      <button data-mv="deckbottom">山札の下へ</button>
+      ${c.origin==="gr" ? '<button data-mv="grbottom">超GRの下へ</button>' : ''}
+      ${c.origin==="hyper" ? '<button data-mv="hyper">超次元へ</button>' : ''}
+    </div>`;
+}
+function bindMoveButtons(ctx){
+  modal.querySelectorAll("[data-mv]").forEach(b=>{
+    b.onclick = ()=>{
+      const ids = takeFromSource(ctx);
+      const mv = b.dataset.mv;
+      if(mv==="battle"){
+        for(const id of ids){ cards[id].tapped=false; }
+        addStack(ids, 12, 12);
+      }else{
+        dropTo(ids, mv, {clientX:0,clientY:0});
+      }
+      renderAll(); closeModal();
+    };
+  });
+}
+function openCardModal(ctx){
+  const c = cards[ctx.cardId];
+  if(!c) return;
+  const place = zoneNameJa(ctx);
+  let body;
+  if(c.faceUp){
+    body = `<h2>${escapeHtml(c.name)}</h2>
+      <div style="font-size:11px;color:var(--sub)">${place}</div>
+      <div class="cardtext">${c.text ? escapeHtml(c.text) : "（カードテキスト未登録）"}</div>`;
+  }else{
+    body = `<h2>裏向きのカード</h2>
+      <div style="font-size:11px;color:var(--sub)">${place}</div>
+      <div class="cardtext">表は見えていません。</div>
+      <div class="btn-grid"><button id="mPeek">こっそり見る</button></div>`;
+  }
+  body += `<div class="btn-grid">
+      <button id="mFlip">裏返す</button>
+      <button id="mTap">${c.tapped ? "アンタップ" : "タップ"}</button>
+    </div>` + moveButtonsHtml(c) +
+    `<div class="btn-grid"><button id="mClose">閉じる</button></div>`;
+  openModal(body);
+  const peek = $("#mPeek");
+  if(peek) peek.onclick = ()=>{
+    $("#modal h2").textContent = c.name;
+    $("#modal .cardtext").textContent = c.text || "（カードテキスト未登録）";
+  };
+  $("#mFlip").onclick = ()=>{ c.faceUp=!c.faceUp; renderAll(); closeModal(); };
+  $("#mTap").onclick  = ()=>{ c.tapped=!c.tapped; renderAll(); closeModal(); };
+  $("#mClose").onclick = closeModal;
+  bindMoveButtons(ctx);
+}
+
+/* シールドの中身モーダル（カードオブジェクト表示） */
+function staticCardEl(id){
+  const c = cards[id];
+  const el = document.createElement("div");
+  el.className = "card " + (c.faceUp ? "faceup" : "facedown");
+  if(c.faceUp){
+    applyCivStyle(el, c);
+    if(c.art){
+      el.classList.add("hasart");
+      el.style.backgroundImage = `url(${c.art})`;
+    }
+    const nm = document.createElement("div");
+    nm.className = "cname"; nm.textContent = c.name;
+    el.appendChild(nm);
+  }
+  return el;
+}
+function openShieldModal(shieldId){
+  const sh = findShield(shieldId);
+  if(!sh){ closeModal(); return; }
+  openModal(`<h2>シールドの中身（${sh.cardIds.length}枚）</h2>
+    <div style="font-size:11px;color:var(--sub)">左が一番上です。カードをタップすると操作できます。</div>
+    <div class="modal-cards" id="shCards"></div>
+    <div class="btn-grid"><button id="shClose">閉じる</button></div>`);
+  const grid = $("#shCards");
+  for(const id of sh.cardIds){
+    const el = staticCardEl(id);
+    el.onclick = ()=> openShieldCardActions(shieldId, id);
+    grid.appendChild(el);
+  }
+  $("#shClose").onclick = closeModal;
+}
+function openShieldCardActions(shieldId, id){
+  const c = cards[id];
+  openModal(`<h2>${c.faceUp ? escapeHtml(c.name) : "裏向きのカード"}</h2>
+    <div style="font-size:11px;color:var(--sub)">シールドの中</div>
+    <div class="cardtext">${c.faceUp
+      ? (c.text ? escapeHtml(c.text) : "（カードテキスト未登録）")
+      : "表は見えていません。"}</div>
+    <div class="btn-grid">
+      ${c.faceUp ? "" : '<button id="sPeek">こっそり見る</button>'}
+      <button id="sFlip">表/裏</button>
+      <button data-go="hand">手札へ</button>
+      <button data-go="grave">墓地へ</button>
+      <button data-go="mana">マナへ</button>
+      <button data-go="battle">バトルへ</button>
+      <button id="sBack">戻る</button>
+    </div>`);
+  const peek = $("#sPeek");
+  if(peek) peek.onclick = ()=>{
+    $("#modal h2").textContent = c.name;
+    $("#modal .cardtext").textContent = c.text || "（カードテキスト未登録）";
+  };
+  $("#sFlip").onclick = ()=>{ c.faceUp = !c.faceUp; renderAll(); openShieldModal(shieldId); };
+  $("#sBack").onclick = ()=> openShieldModal(shieldId);
+  modal.querySelectorAll("[data-go]").forEach(b=>{
+    b.onclick = ()=>{
+      const ids = takeFromSource({kind:"shieldcard", shieldId, cardId:id});
+      if(b.dataset.go === "battle"){
+        for(const x of ids){ cards[x].faceUp = true; cards[x].tapped = false; }
+        addStack(ids, 12, 12);
+      }else{
+        dropTo(ids, b.dataset.go, {clientX:0,clientY:0});
+      }
+      renderAll();
+      const still = findShield(shieldId);
+      if(still) openShieldModal(shieldId); else closeModal();
+    };
+  });
+}
+
+/* 重ね方の選択 */
+function openStackChoice(ctx, stackId){
+  const st = findStack(stackId);
+  const topName = st ? cards[st.cardIds[0]].name : "";
+  openModal(`<h2>どう重ねますか？</h2>
+    <div style="font-size:12px;color:var(--sub)">重ねる先：${escapeHtml(topName)}</div>
+    <div class="btn-grid">
+      <button class="primary" id="cTop">上に重ねる（進化など）</button>
+      <button id="cBottom">一番下に置く</button>
+      <button id="cSeal">封印にする（裏向き）</button>
+      <button id="cCancel">やめる</button>
+    </div>`);
+  $("#cTop").onclick    = ()=>{ applyStackDrop(ctx, stackId, "top"); closeModal(); };
+  $("#cBottom").onclick = ()=>{ applyStackDrop(ctx, stackId, "bottom"); closeModal(); };
+  $("#cSeal").onclick   = ()=>{ applyStackDrop(ctx, stackId, "seal"); closeModal(); };
+  $("#cCancel").onclick = ()=>{ closeModal(); renderAll(); };
+}
+
+function hyperToBattle(id){
+  if(!id) return;
+  const i = Z.hyper.indexOf(id);
+  if(i>=0) Z.hyper.splice(i,1);
+  cards[id].faceUp = true; cards[id].tapped = false;
+  addStack([id], 12 + (Z.battle.length*16)%80, 12 + (Z.battle.length*12)%60);
+  renderAll();
+}
+function openHyperMenu(){
+  openModal(`<h2>超次元ゾーン（${Z.hyper.length}枚）</h2>
+    <div style="font-size:11px;color:var(--sub)">超次元ゾーンは常にすべて公開情報です。カードをタップすると操作できます。</div>
+    <div class="modal-cards" id="hyCards"></div>
+    <div class="btn-grid"><button id="hClose">閉じる</button></div>`);
+  const grid = $("#hyCards");
+  for(const id of Z.hyper){
+    const el = staticCardEl(id);
+    el.onclick = ()=> openHyperCardActions(id);
+    grid.appendChild(el);
+  }
+  $("#hClose").onclick = closeModal;
+}
+function openHyperCardActions(id){
+  const c = cards[id];
+  openModal(`<h2>${escapeHtml(c.name)}</h2>
+    <div style="font-size:11px;color:var(--sub)">超次元ゾーン</div>
+    <div class="cardtext">${c.text ? escapeHtml(c.text) : "（カードテキスト未登録）"}</div>
+    <div class="btn-grid">
+      <button class="primary" id="hyBattle">バトルへ</button>
+      <button id="hyBack">戻る</button>
+    </div>`);
+  $("#hyBattle").onclick = ()=>{ hyperToBattle(id); closeModal(); };
+  $("#hyBack").onclick = openHyperMenu;
+}
+function openDeckMenu(){
+  openModal(`<h2>山札（${Z.deck.length}枚）</h2>
+    <div class="btn-grid">
+      <button id="dDraw">1枚ドロー</button>
+      <button id="dMana">マナ加速</button>
+      <button id="dShuffle">シャッフル</button>
+      <button id="dViewAll">すべて見る</button>
+    </div>
+    <div class="btn-grid" style="align-items:center">
+      <span style="font-size:12px">上から</span>
+      <input class="num-input" id="dNum" type="number" min="1" value="3">
+      <span style="font-size:12px">枚</span>
+      <button id="dViewTop">見る</button>
+    </div>
+    <div class="btn-grid"><button id="dClose">閉じる</button></div>`);
+  $("#dDraw").onclick = ()=>{ draw(); closeModal(); };
+  $("#dMana").onclick = ()=>{ manaCharge(); closeModal(); };
+  $("#dShuffle").onclick = ()=>{ shuffle(Z.deck); renderAll(); closeModal(); };
+  $("#dViewAll").onclick = ()=> openDeckViewer(Z.deck.length);
+  $("#dViewTop").onclick = ()=>{
+    const n = parseInt($("#dNum").value,10) || 1;
+    openDeckViewer(Math.min(n, Z.deck.length));
+  };
+  $("#dClose").onclick = closeModal;
+}
+function openGRMenu(){
+  openModal(`<h2>超GRゾーン（${Z.gr.length}枚）</h2>
+    <div class="btn-grid">
+      <button id="gSummon">GR召喚</button>
+      <button id="gShuffle">シャッフル</button>
+      <button id="gClose">閉じる</button>
+    </div>`);
+  $("#gSummon").onclick = ()=>{ grSummon(); closeModal(); };
+  $("#gShuffle").onclick = ()=>{ shuffle(Z.gr); renderAll(); closeModal(); };
+  $("#gClose").onclick = closeModal;
+}
+function openDeckViewer(n){
+  const items = Z.deck.slice(0, n);
+  let html = `<h2>山札の上から ${n} 枚</h2>
+    <div style="font-size:11px;color:var(--sub)">1 が一番上です。移動するとその場で山札から抜けます。</div>
+    <div class="deck-list">`;
+  items.forEach((id, i)=>{
+    html += `<div class="deck-item" data-card="${id}">
+      <span class="pos">${i+1}</span>
+      <span class="nm">${escapeHtml(cards[id].name)}</span>
+      <button class="small" data-act="hand">手札</button>
+      <button class="small" data-act="mana">マナ</button>
+      <button class="small" data-act="grave">墓地</button>
+      <button class="small" data-act="deckbottom">下へ</button>
+    </div>`;
+  });
+  html += `</div>
+    <div class="btn-grid">
+      <button id="vShuffleClose">シャッフルして閉じる</button>
+      <button id="vClose">そのまま閉じる</button>
+    </div>`;
+  openModal(html);
+  modal.querySelectorAll(".deck-item button").forEach(b=>{
+    b.onclick = ()=>{
+      const row = b.closest(".deck-item");
+      const id = row.dataset.card;
+      const i = Z.deck.indexOf(id);
+      if(i>=0){
+        Z.deck.splice(i,1);
+        dropTo([id], b.dataset.act, {clientX:0,clientY:0});
+        row.remove();
+        renderAll();
+      }
+    };
+  });
+  $("#vShuffleClose").onclick = ()=>{ shuffle(Z.deck); renderAll(); closeModal(); };
+  $("#vClose").onclick = closeModal;
+}
+
+/* ============ ヘッダーボタン ============ */
+$("#btnSetup2").onclick = ()=>{
+  if(deckList.main.length===0){ $("#setup").classList.add("show"); return; }
+  initialSetup();
+};
+$("#btnShuffle").onclick = ()=>{ shuffle(Z.deck); renderAll(); };
+$("#btnDraw").onclick = draw;
+$("#btnMana").onclick = manaCharge;
+$("#btnGR").onclick = grSummon;
+$("#btnViewDeck").onclick = openDeckMenu;
+$("#btnDeckEdit").onclick = ()=> $("#setup").classList.add("show");
+
+/* ============ デッキ入力画面 ============ */
+const SAMPLE_MAIN =
+`4 ボルメテウス・サンプル・ドラゴン [火] || W・ブレイカー（このクリーチャーはシールドを2枚ブレイクする）
+4 サンプル・チャージャー [自然] || S・トリガー　山札の上から1枚をマナゾーンに置く
+4 試作スパーク [光] || S・トリガー　相手のクリーチャーをすべてタップする
+4 ためしのブロッカー [光/水] || ブロッカー
+4 れんしゅう・ホーン [自然]
+4 デモンストレーション・ハンド [闇] || 相手の手札を1枚選んで捨てさせる
+4 サンプル・サーチャー [水] || 山札から好きなカードを1枚手札に加え、山札をシャッフルする
+4 おためしビースト [火/自然]
+4 シミュレーション・ガード [闇/火/光] || S・トリガー
+4 れんしゅうの覚醒者 [ゼロ]`;
+const SAMPLE_GR =
+`2 GRサンプルA [火]
+2 GRサンプルB [水]
+2 GRサンプルC [闇]
+2 GRサンプルD [光]
+2 GRサンプルE [自然]
+2 GRサンプルF [ゼロ]`;
+const SAMPLE_HYPER =
+`2 サンプル・ルピア [火]
+2 試作の覚醒者シミュリオン [光]
+4 おためしの剣 [火/自然]`;
+
+/* ===== デッキの保存（端末のブラウザ内に保存） ===== */
+let memDecks = {};
+function loadDecks(){
+  try{
+    const v = localStorage.getItem("dmsolo_decks");
+    return v ? JSON.parse(v) : {...memDecks};
+  }catch(e){ return {...memDecks}; }
+}
+function storeDecks(d){
+  memDecks = d;
+  try{ localStorage.setItem("dmsolo_decks", JSON.stringify(d)); }catch(e){}
+}
+function renderSavedList(){
+  const box = $("#savedList");
+  const decks = loadDecks();
+  const names = Object.keys(decks).sort();
+  if(!names.length){
+    box.innerHTML = '<div style="font-size:11px;color:var(--sub);padding:4px 0">まだ保存されたデッキはありません。</div>';
+    return;
+  }
+  box.innerHTML = "";
+  for(const nm of names){
+    const row = document.createElement("div");
+    row.className = "deck-item";
+    row.innerHTML = `<span class="nm">${escapeHtml(nm)}</span>
+      <button class="small" data-a="load">読み込む</button>
+      <button class="small" data-a="del">削除</button>`;
+    row.querySelector('[data-a="load"]').onclick = ()=>{
+      const d = loadDecks()[nm]; if(!d) return;
+      $("#taMain").value = d.main || "";
+      $("#taGR").value = d.gr || "";
+      $("#taHyper").value = d.hyper || "";
+      $("#deckName").value = nm;
+    };
+    row.querySelector('[data-a="del"]').onclick = ()=>{
+      const d = loadDecks(); delete d[nm]; storeDecks(d); renderSavedList();
+    };
+    box.appendChild(row);
+  }
+}
+$("#btnSaveDeck").onclick = ()=>{
+  const nm = $("#deckName").value.trim();
+  if(!nm){ $("#deckName").style.borderColor = "#ff6060"; return; }
+  $("#deckName").style.borderColor = "";
+  const d = loadDecks();
+  d[nm] = {main:$("#taMain").value, gr:$("#taGR").value, hyper:$("#taHyper").value, ts:Date.now()};
+  storeDecks(d);
+  renderSavedList();
+};
+renderSavedList();
+
+$("#btnSample").onclick = ()=>{
+  $("#taMain").value = SAMPLE_MAIN;
+  $("#taGR").value = SAMPLE_GR;
+  $("#taHyper").value = SAMPLE_HYPER;
+};
+$("#btnStart").onclick = ()=>{
+  const main = parseList($("#taMain").value);
+  if(main.length===0){
+    $("#taMain").style.borderColor = "#ff6060";
+    return;
+  }
+  deckList.main = main;
+  deckList.gr = parseList($("#taGR").value);
+  deckList.hyper = parseList($("#taHyper").value);
+  learnCivDict([...deckList.main, ...deckList.gr, ...deckList.hyper]);
+  $("#setup").classList.remove("show");
+  initialSetup();
+};
+
+/* ============ ページまるごと貼り付け取り込み ============ */
+const JUNK_PATTERNS = [
+  /https?:\/\//, /ガチまとめ/, /カーナベル/, /DECK ?MAKER/i, /デッキレシピ/, /デッキ価格/,
+  /コピーしてデッキ/, /note埋め込み/, /シミュレーション/, /超特価/, /推定読み取り/, /Copyright/i,
+  /^Loading/i, /再読み込み/, /^通知を?$/, /^受け取る$/, /^ホーム$/, /^カードを買う$/, /^記事を探す$/,
+  /^全て$/, /^人気順$/, /^ツイート$/, /^ブックマーク$/, /^ラインで送る$/, /^利用規約$/, /プライバシー/,
+  /^運営会社$/, /^サイトマップ$/, /^トップ$/, /^記事一覧$/, /^記事ランキング$/, /^最新情報$/,
+  /^大会情報$/, /^交流会情報$/, /^新商品情報$/, /^コラム$/, /^環境$/, /^デッキテーマ/, /^ライター紹介$/,
+  /^デュエプレ$/, /^提携サイト$/, /^スペシャルサンクス$/, /^遊戯王$/, /^ポケモン/, /^デュエマ/,
+  /^フォーマット/, /^アドバンス$/, /^オリジナル(デッキ)?$/, /^殿堂/, /^ログイン$/, /^マイページ$/,
+  /^新規作成$/, /^編集$/, /^削除$/, /^共有$/, /^保存$/, /^検索$/, /^並べ?替え/, /^作成日/, /^更新日/,
+  /^閲覧数/, /^いいね/, /^デッキ画像/, /もっと見る/
+];
+function isJunkLine(t){
+  if(t.length > 48) return true;
+  if(/^[¥￥]/.test(t) || /^\d{1,3}(,\d{3})+円?$/.test(t) || /^\d+円$/.test(t)) return true;
+  return JUNK_PATTERNS.some(re => re.test(t));
+}
+const SECTION_MAP = [
+  [/^メイン(デッキ)?$/, "main"],
+  [/^超?GR(ゾーン)?$/i, "gr"],
+  [/^超次元(ゾーン)?$/, "hyper"],
+  [/^(ドルマゲドン|零龍)$/, "main"],
+  [/^(エクストラ|サイド)$/, "skip"]
+];
+function smartExtract(raw){
+  const out = {main:[], gr:[], hyper:[]};
+  let sec = null;        // 「メイン」などの見出しが現れるまでは無視
+  let last = null;
+  for(const raw0 of raw.split(/\n+/)){
+    const t = raw0.replace(/[\t ]+/g, " ").trim();
+    if(!t) continue;
+    let switched = false;
+    for(const [re, name] of SECTION_MAP){
+      if(re.test(t)){ sec = name; last = null; switched = true; break; }
+    }
+    if(switched) continue;
+    if(sec === null || sec === "skip") continue;
+    let m = t.match(/^[×xX]?\s*(\d{1,2})\s*枚?$/);
+    if(m){ if(last) last.count = parseInt(m[1],10); continue; }
+    if(isJunkLine(t)){ last = null; continue; }
+    let name = t, count = 1;
+    if((m = t.match(/^(.+?)[\s　]*[×xX]\s*(\d{1,2})$/))){ name = m[1].trim(); count = +m[2]; }
+    else if((m = t.match(/^(\d{1,2})[\s　]*[×x]?[\s　]+(.+)$/))){ count = +m[1]; name = m[2].trim(); }
+    else if((m = t.match(/^(.+?)[\s　]+(\d{1,2})枚$/))){ name = m[1].trim(); count = +m[2]; }
+    if(!name || name.length < 2){ last = null; continue; }
+    if(!/[ぁ-んァ-ヶ一-龯A-Za-z]/.test(name)){ last = null; continue; }
+    const entry = {name, count};
+    out[sec].push(entry);
+    last = entry;
+  }
+  return out;
+}
+function entriesToText(entries){
+  const order = [], map = {};
+  for(const e of entries){
+    if(map[e.name] == null){ map[e.name] = 0; order.push(e.name); }
+    map[e.name] += e.count;
+  }
+  const dict = loadCivDict();
+  return order.map(n=>{
+    const tag = dict[n] && dict[n].length ? ` [${dict[n].join("/")}]` : "";
+    return (map[n] > 1 ? map[n] + " " : "") + n + tag;
+  }).join("\n");
+}
+$("#btnSmart").onclick = ()=>{
+  const raw = $("#taSmart").value;
+  const status = $("#smartStatus");
+  if(!raw.trim()){ status.textContent = "貼り付けてからボタンを押してください。"; return; }
+  const r = smartExtract(raw);
+  const cnt = arr => arr.reduce((a,e)=> a + e.count, 0);
+  if(cnt(r.main) === 0){
+    status.textContent = "カードらしい行を見つけられませんでした。貼り付けた内容をそのままClaudeに送ってもらえれば、この解析を改善できます。";
+    return;
+  }
+  $("#taMain").value = entriesToText(r.main);
+  $("#taGR").value = entriesToText(r.gr);
+  $("#taHyper").value = entriesToText(r.hyper);
+  status.textContent = `取り込みました：メイン${cnt(r.main)}枚 / GR${cnt(r.gr)}枚 / 超次元${cnt(r.hyper)}枚。間違いがあれば下の欄で直してください。`;
+  $("#taSmart").value = "";
+};
+
+/* ============ 文明辞書（一度教えれば次から自動） ============ */
+function loadCivDict(){
+  try{ return JSON.parse(localStorage.getItem("dmCivDict") || "{}"); }
+  catch(e){ return {}; }
+}
+function learnCivDict(entries){
+  if(!storageOK()) return;
+  const dict = loadCivDict();
+  let changed = false;
+  for(const e of entries){
+    if(e.civs && e.civs.length){ dict[e.name] = e.civs; changed = true; }
+  }
+  if(changed){
+    try{ localStorage.setItem("dmCivDict", JSON.stringify(dict)); }catch(e){}
+  }
+}
+function applyCivDictToTextareas(){
+  const dict = loadCivDict();
+  let added = 0;
+  for(const id of ["#taMain","#taGR","#taHyper"]){
+    const lines = $(id).value.split("\n").map(line=>{
+      if(!line.trim()) return line;
+      if(/[\[［]/.test(line)) return line;
+      const parsed = parseList(line);
+      if(!parsed.length) return line;
+      const e = parsed[0];
+      const civs = dict[e.name];
+      if(!civs || !civs.length) return line;
+      added++;
+      return (e.count > 1 ? e.count + " " : "") + e.name +
+             ` [${civs.join("/")}]` + (e.text ? " || " + e.text : "");
+    });
+    $(id).value = lines.join("\n");
+  }
+  $("#smartStatus").textContent = added
+    ? `覚えている文明を ${added} 種類に補完しました。`
+    : "補完できるカードがありませんでした（まだ覚えていないか、すでに [ ] が付いています）。";
+}
+$("#btnCivFill").onclick = applyCivDictToTextareas;
+
+/* ============ 公式デッキシートPDFの読み込み ============ */
+let pdfjsReady = null;
+function ensurePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  if(pdfjsReady) return pdfjsReady;
+  pdfjsReady = new Promise((res, rej)=>{
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    sc.onload = ()=>{
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      res();
+    };
+    sc.onerror = ()=> rej(new Error("読み取りライブラリを取得できませんでした（オフラインの可能性）"));
+    document.head.appendChild(sc);
+  });
+  return pdfjsReady;
+}
+function smartJoin(a, b){
+  if(!a) return b;
+  const x = a.slice(-1), y = b.charAt(0);
+  return (/[A-Za-z0-9]/.test(x) && /[A-Za-z0-9]/.test(y)) ? a + " " + b : a + b;
+}
+function aggregateLines(names){
+  const order = [], map = {};
+  for(const n of names){
+    const key = n.trim();
+    if(!key) continue;
+    if(map[key] == null){ map[key] = 0; order.push(key); }
+    map[key]++;
+  }
+  return order.map(k => (map[k] > 1 ? map[k] + " " : "") + k).join("\n");
+}
+/* ===== AIによるシート読み取り（Claude内で開いている場合に利用可能） ===== */
+function fileToBase64(file){
+  return new Promise((res, rej)=>{
+    const r = new FileReader();
+    r.onload = ()=> res(String(r.result).split(",")[1]);
+    r.onerror = ()=> rej(new Error("ファイルを読めませんでした"));
+    r.readAsDataURL(file);
+  });
+}
+async function aiAsk(block, ask){
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{role: "user", content: [block, {type: "text", text: ask}]}]
+    })
+  });
+  if(!res.ok) throw new Error("AI読み取り不可(" + res.status + ")");
+  const data = await res.json();
+  const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
+  return {text, truncated: data.stop_reason === "max_tokens"};
+}
+async function aiReadDeckSheet(b64, mediaType, status){
+  const block = mediaType === "application/pdf"
+    ? {type:"document", source:{type:"base64", media_type:"application/pdf", data:b64}}
+    : {type:"image", source:{type:"base64", media_type:mediaType, data:b64}};
+  const RULES = "出力は指定の形式のみ。説明文・前置き・コードブロック記号は一切禁止。" +
+    "同名カードは枚数をまとめて1行にする。文明はあなたの知識で 光/水/闇/火/自然/ゼロ を/区切りで書き、不明なら空欄。";
+  status.textContent = "AIでシートを読み取り中…（1/2 メインデッキ）";
+  const r1 = await aiAsk(block,
+    "これはデュエル・マスターズの公式デッキシートです。デッキリスト表（1〜40）のカードだけを読み取り、1行ずつ「枚数|文明|カード名」の形式で出力してください。" +
+    "FORBIDDEN STARや零龍（滅亡の起源 零無）の行は「有」に丸が付いている場合のみ同じ形式で最後に追加。" + RULES);
+  status.textContent = "AIでシートを読み取り中…（2/2 超GR・超次元）";
+  const r2 = await aiAsk(block,
+    "同じデッキシートの「超GRゾーン」と「超次元ゾーン」の表だけを読み取り、次の形式で出力してください。\n" +
+    "#GR\n枚数|文明|カード名\n#HYPER\n枚数|文明|カード名\n表が空欄なら見出し行のみ出力。" + RULES);
+  const parseLines = (text, into, cnt, key)=>{
+    for(const line of text.split(/\n/)){
+      const t = line.trim();
+      if(!t || /^#/.test(t)) continue;
+      const parts = t.split("|");
+      if(parts.length < 3) continue;
+      const count = parseInt(parts[0], 10) || 1;
+      const civ = parts[1].trim();
+      const name = parts.slice(2).join("|").trim();
+      if(!name) continue;
+      into[key].push((count > 1 ? count + " " : "") + name + (civ ? ` [${civ}]` : ""));
+      cnt[key] += count;
+    }
+  };
+  const out = {main: [], gr: [], hyper: []};
+  const cnt = {main: 0, gr: 0, hyper: 0};
+  parseLines(r1.text, out, cnt, "main");
+  const gi = r2.text.search(/#\s*GR/i);
+  const hi = r2.text.search(/#\s*HYPER/i);
+  if(gi >= 0) parseLines(r2.text.slice(gi, hi >= 0 ? hi : undefined), out, cnt, "gr");
+  if(hi >= 0) parseLines(r2.text.slice(hi), out, cnt, "hyper");
+  if(out.main.length === 0) throw new Error("AIの応答にカードが見つかりません");
+  $("#taMain").value = out.main.join("\n");
+  $("#taGR").value = out.gr.join("\n");
+  $("#taHyper").value = out.hyper.join("\n");
+  let warn = (r1.truncated || r2.truncated) ? "（応答が長すぎて一部欠けた可能性があります。枚数を確認してください）" : "";
+  status.textContent = `AIで読み取りました：メイン${cnt.main}枚 / GR${cnt.gr}枚 / 超次元${cnt.hyper}枚（文明も自動付与）${warn}。内容を確認して「このデッキで始める」を押してください。`;
+}
+
+let pdfStage = "";
+async function importDeckPdf(file){
+  const status = $("#pdfStatus");
+  status.textContent = "読み込み中…";
+  // まずAI読み取りを試す（Claude内で開いている場合に成功する）
+  let aiErr = null;
+  try{
+    const b64 = await fileToBase64(file);
+    await aiReadDeckSheet(b64, "application/pdf", status);
+    return;
+  }catch(e){ aiErr = e; }
+  status.textContent = "AI読み取りが使えません（" + (aiErr.message || aiErr) + "）。文字認識（OCR）に切り替えます…";
+  pdfStage = "PDF読み取り部品の取得";
+  try{
+    await ensurePdfJs();
+    pdfStage = "PDFを開く";
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    pdfStage = "ページの展開";
+    const page = await pdf.getPage(1);
+    pdfStage = "文字データの確認";
+    const tc = await page.getTextContent();
+    const items = tc.items
+      .map(it => ({s: it.str.trim(), x: it.transform[4], y: it.transform[5]}))
+      .filter(it => it.s);
+    // y座標で行にまとめる
+    const rows = [];
+    for(const it of items){
+      let r = rows.find(r => Math.abs(r.y - it.y) < 4);
+      if(!r){ r = {y: it.y, items: []}; rows.push(r); }
+      r.items.push(it);
+    }
+    rows.sort((a,b)=> b.y - a.y);
+    rows.forEach(r => r.items.sort((a,b)=> a.x - b.x));
+    // セクション見出しのy座標
+    const findY = key => {
+      const r = rows.find(r => r.items.some(i => i.s.includes(key)));
+      return r ? r.y : null;
+    };
+    const yMain = findY("デッキリスト");
+    const yGR = findY("超GRゾーン");
+    const yHyper = findY("超次元ゾーン");
+    const sectionOf = y => {
+      if(yHyper !== null && y < yHyper) return "hyper";
+      if(yGR !== null && y < yGR) return "gr";
+      if(yMain !== null && y < yMain) return "main";
+      return null;
+    };
+    // 「番号 → カード名」のセルを拾う（左右2列にも対応）
+    const cells = {main: [], gr: [], hyper: []};
+    for(const r of rows){
+      const sec = sectionOf(r.y);
+      if(!sec) continue;
+      let cur = null;
+      for(const it of r.items){
+        let m;
+        if(/^\d{1,2}$/.test(it.s)){
+          if(cur && cur.text) cells[sec].push(cur.text);
+          cur = {text: ""};
+        }else if((m = it.s.match(/^(\d{1,2})\s+(.+)$/))){
+          if(cur && cur.text) cells[sec].push(cur.text);
+          cur = {text: m[2]};
+        }else if(cur){
+          cur.text = smartJoin(cur.text, it.s);
+        }
+      }
+      if(cur && cur.text) cells[sec].push(cur.text);
+    }
+    if(cells.main.length === 0){
+      pdfStage = "文字認識（OCR）";
+      await ocrDeckSheet(page, status);
+      return;
+    }
+    $("#taMain").value = aggregateLines(cells.main);
+    $("#taGR").value = aggregateLines(cells.gr);
+    $("#taHyper").value = aggregateLines(cells.hyper);
+    status.textContent = `読み込みました：メイン${cells.main.length}枚 / 超GR${cells.gr.length}枚 / 超次元${cells.hyper.length}枚。内容を確認・修正してから「このデッキで始める」を押してください。`;
+  }catch(err){
+    let hint = "";
+    const msg = String(err && err.message || err);
+    if(pdfStage.includes("部品") || pdfStage.includes("OCR") || /fetch|network|load|script|取得/i.test(msg)){
+      hint = " ヒント：この機能は通信が必要です。Claudeのプレビュー画面では外部部品の取得がブロックされるため動きません。GitHub Pagesで公開したページか、ブラウザで直接開いたファイルでお試しください。それでも失敗する場合は、シートのスクリーンショット画像を選ぶ方法も使えます。";
+    }
+    status.textContent = `読み込みに失敗しました（段階：${pdfStage}）：` + msg + hint;
+  }
+}
+/* ===== 画像形式デッキシートのOCR =====
+   手順: 高解像度で描画 → 罫線を検出 → カード名マスを1個ずつ切り出し → 1行ずつ認識 */
+let tessReady = null;
+function loadScript(src){
+  return new Promise((res, rej)=>{
+    const sc = document.createElement("script");
+    sc.src = src;
+    sc.onload = res;
+    sc.onerror = ()=> rej(new Error("取得失敗: " + src));
+    document.head.appendChild(sc);
+  });
+}
+function ensureTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tessReady) return tessReady;
+  tessReady = (async ()=>{
+    const urls = [
+      "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js",
+      "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+      "https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js"
+    ];
+    for(const u of urls){
+      try{ await loadScript(u); return; }catch(e){}
+    }
+    throw new Error("OCRライブラリを取得できませんでした（通信環境を確認してください）");
+  })().catch(e=>{ tessReady = null; throw e; });
+  return tessReady;
+}
+async function createOcrWorker(){
+  try{
+    return await Tesseract.createWorker("jpn+eng", 1);
+  }catch(e){
+    // 既定の配信元が使えない環境向けの予備
+    return await Tesseract.createWorker("jpn+eng", 1, {
+      workerPath: "https://unpkg.com/tesseract.js@5.1.1/dist/worker.min.js",
+      corePath: "https://unpkg.com/tesseract.js-core@5.1.0",
+      langPath: "https://tessdata.projectnaptha.com/4.0.0"
+    });
+  }
+}
+function cleanupOcrText(t){
+  t = t.replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
+  // OCRが入れがちな日本語間の空白：空白だらけの出力のときだけ全削除（「単騎連射 マグナム」のような本来の空白は残す）
+  const cjkCount = (t.match(/[^\x00-\x7F]/g) || []).length;
+  const gapCount = (t.match(/[^\x00-\x7F] (?=[^\x00-\x7F])/g) || []).length;
+  if(cjkCount > 0 && gapCount / cjkCount > 0.2){
+    t = t.replace(/([^\x00-\x7F]) (?=[^\x00-\x7F])/g, "$1");
+  }
+  t = t.replace(/^[|｜\s]+/, "").replace(/[|｜\s]+$/, "");      // 罫線の読み残し
+  // カタカナ語の中に紛れた形の似た漢字を補正（ホ一ル→ホール 等）
+  const KFIX = {"一":"ー","口":"ロ","力":"カ","工":"エ","夕":"タ","二":"ニ","八":"ハ","卜":"ト"};
+  for(let k=0;k<2;k++){
+    t = t.replace(/([ァ-ヶー])([一口力工夕二八卜])(?=[ァ-ヶー])/g, (m,a,b)=> a + KFIX[b]);
+  }
+  t = t.replace(/([ァ-ヶ])一$/g, "$1ー");
+  t = t.replace(/^([一口力工夕二八卜])(?=[ァ-ヶー])/, m=> KFIX[m]);  // 語頭の誤認も補正
+  if(/^[有無・()（）\s]*$/.test(t)) return "";
+  if(t.length < 2) return "";
+  return t;
+}
+async function ocrDeckSheet(page, status){
+  status.textContent = "画像形式のシートを検出しました。文字認識に切り替えます…";
+  // 高解像度で描画してから共通処理へ
+  const vp0 = page.getViewport({scale: 1});
+  const scale = 2000 / vp0.width;
+  const vp = page.getViewport({scale});
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(vp.width);
+  cv.height = Math.round(vp.height);
+  await page.render({canvasContext: cv.getContext("2d"), viewport: vp}).promise;
+  await ocrCanvasSheet(cv, status);
+}
+async function ocrCanvasSheet(cv, status){
+  const W = cv.width, H = cv.height;
+  const data = cv.getContext("2d").getImageData(0, 0, W, H).data;
+  const dark = new Uint8Array(W * H);
+  for(let i = 0; i < W * H; i++){
+    const l = 0.3*data[i*4] + 0.59*data[i*4+1] + 0.11*data[i*4+2];
+    dark[i] = l < 160 ? 1 : 0;
+  }
+  // 2) 横罫線（連続して黒が続く長さで判定：分かれた小箱を拾わない）
+  const hys = [];
+  for(let y = 0; y < H; y++){
+    let best = 0, cur = 0;
+    const off = y * W;
+    for(let x = 0; x < W; x++){
+      cur = dark[off + x] ? cur + 1 : 0;
+      if(cur > best) best = cur;
+    }
+    if(best > 0.6 * W) hys.push(y);
+  }
+  const hg = [];
+  for(const y of hys){
+    const g = hg[hg.length - 1];
+    if(g && y - g[g.length - 1] <= 3) g.push(y);
+    else hg.push([y]);
+  }
+  const hl = hg.map(g => g[(g.length / 2) | 0]);
+  // 3) 行バンドごとに縦罫線を探し、「左隣が番号マス」の幅広マスだけ拾う
+  const rowsCells = [], rowsMid = [];
+  for(let i = 0; i < hl.length - 1; i++){
+    const y0 = hl[i], y1 = hl[i + 1], h = y1 - y0;
+    if(h <= 0.008 * H || h >= 0.045 * H) continue;
+    const need = 0.75 * (h - 6);
+    const vxs = [];
+    for(let x = 0; x < W; x++){
+      let c = 0;
+      for(let y = y0 + 3; y < y1 - 3; y++) c += dark[y * W + x];
+      if(c > need) vxs.push(x);
+    }
+    const vg = [];
+    for(const x of vxs){
+      const g = vg[vg.length - 1];
+      if(g && x - g[g.length - 1] <= 3) g.push(x);
+      else vg.push([x]);
+    }
+    const vl = vg.map(g => g[(g.length / 2) | 0]);
+    if(vl.length < 3) continue;
+    if(vl[1] - vl[0] >= 0.055 * W) continue;  // 行頭が番号マスでない行（有無欄など）は除外
+    const rc = [];
+    for(let j = 1; j < vl.length; j++){
+      const wsp = vl[j] - vl[j - 1];
+      if(wsp > 0.12 * W && j >= 2 && (vl[j - 1] - vl[j - 2]) < 0.055 * W){
+        rc.push({x0: vl[j - 1], x1: vl[j], y0, y1});
+      }
+    }
+    if(rc.length){ rowsCells.push(rc); rowsMid.push((y0 + y1) / 2); }
+  }
+  if(rowsCells.length === 0){
+    status.textContent = "シートの表（罫線）を見つけられませんでした。公式デッキシートのPDFか確認してください。";
+    return;
+  }
+  // 4) 表ごと（メイン/GR/超次元）のクラスタに分割
+  const hs = rowsCells.map(r => r[0].y1 - r[0].y0).sort((a, b) => a - b);
+  const medh = hs[(hs.length / 2) | 0];
+  const clusters = [[0]];
+  for(let i = 1; i < rowsCells.length; i++){
+    if(rowsMid[i] - rowsMid[i - 1] > 2.2 * medh) clusters.push([]);
+    clusters[clusters.length - 1].push(i);
+  }
+  // 5) シートの番号順（列優先）に並べ、文字の入ったマスだけ残す
+  const inkRatio = c => {
+    let n = 0, t = 0;
+    for(let y = c.y0 + 5; y < c.y1 - 5; y++)
+      for(let x = c.x0 + 5; x < c.x1 - 5; x++){ t++; n += dark[y * W + x]; }
+    return t ? n / t : 0;
+  };
+  const sections = [];
+  for(const cl of clusters){
+    const rows = cl.map(i => rowsCells[i]);
+    const xs = [...new Set(rows.flat().map(c => c.x0))].sort((a, b) => a - b);
+    const colStarts = [];
+    for(const x of xs){
+      if(colStarts.length && x - colStarts[colStarts.length - 1] < 0.03 * W) continue;
+      colStarts.push(x);
+    }
+    const ordered = [];
+    for(const cs of colStarts)
+      for(const r of rows)
+        for(const c of r)
+          if(Math.abs(c.x0 - cs) < 0.03 * W) ordered.push(c);
+    sections.push(ordered.filter(c => inkRatio(c) > 0.004));
+  }
+  const secNames = ["main", "gr", "hyper"];
+  const total = sections.slice(0, 3).reduce((a, s2) => a + s2.length, 0);
+  if(total === 0){
+    status.textContent = "カード名の入ったマスが見つかりませんでした（白紙のシート？）。";
+    return;
+  }
+  // 6) マスを1個ずつ認識
+  status.textContent = "認識エンジンを準備中…（初回のみ日本語辞書 約20MB をダウンロードします）";
+  await ensureTesseract();
+  const worker = await createOcrWorker();
+  await worker.setParameters({tessedit_pageseg_mode: "7", user_defined_dpi: "300"});  // 1行モード
+  const results = {main: [], gr: [], hyper: []};
+  let done = 0;
+  try{
+    for(let si = 0; si < sections.length && si < 3; si++){
+      for(const c of sections[si]){
+        const t = await ocrCell(worker, cv, c);
+        done++;
+        status.textContent = `文字を認識中… ${done}/${total}`;
+        if(t) results[secNames[si]].push({name: t, count: 1});
+      }
+    }
+  } finally {
+    await worker.terminate();
+  }
+  $("#taMain").value = entriesToText(results.main);
+  $("#taGR").value = entriesToText(results.gr);
+  $("#taHyper").value = entriesToText(results.hyper);
+  status.textContent = `読み取り完了：メイン${results.main.length}枚 / GR${results.gr.length}枚 / 超次元${results.hyper.length}枚。` +
+    "誤読があれば下の欄で直してから始めてください（覚えている文明は自動で付けています）。";
+}
+async function ocrCell(worker, srcCanvas, c){
+  const m = 4;
+  const sw = c.x1 - c.x0 - m * 2, sh = c.y1 - c.y0 - m * 2;
+  if(sw < 10 || sh < 8) return "";
+  const targetH = 96;
+  const sc = targetH / sh;
+  const c2 = document.createElement("canvas");
+  c2.width = Math.round(sw * sc);
+  c2.height = targetH;
+  const cx = c2.getContext("2d");
+  cx.imageSmoothingEnabled = true;
+  cx.imageSmoothingQuality = "high";
+  cx.drawImage(srcCanvas, c.x0 + m, c.y0 + m, sw, sh, 0, 0, c2.width, c2.height);
+  // 白黒くっきりに（OCR精度向上）
+  const id = cx.getImageData(0, 0, c2.width, c2.height);
+  const d = id.data;
+  for(let i = 0; i < c2.width * c2.height; i++){
+    const l = 0.3*d[i*4] + 0.59*d[i*4+1] + 0.11*d[i*4+2];
+    const v = l < 180 ? 0 : 255;
+    d[i*4] = d[i*4+1] = d[i*4+2] = v;
+    d[i*4+3] = 255;
+  }
+  cx.putImageData(id, 0, 0);
+  let {data} = await worker.recognize(c2);
+  let txt = cleanupOcrText(data.text || "");
+  if(!txt){
+    // 1行モードで読めなかったマスはブロックモードで再挑戦
+    await worker.setParameters({tessedit_pageseg_mode: "6"});
+    const r2 = await worker.recognize(c2);
+    await worker.setParameters({tessedit_pageseg_mode: "7"});
+    txt = cleanupOcrText(r2.data.text || "");
+  }
+  return txt;
+}
+
+$("#pdfInput").addEventListener("change", e=>{
+  const f = e.target.files[0];
+  e.target.value = "";
+  if(!f) return;
+  if(/\.(csv|txt)$/i.test(f.name) || (f.type && f.type.startsWith("text/"))) importDeckTextFile(f);
+  else if(f.type && f.type.startsWith("image/")) importDeckSheetImage(f);
+  else importDeckPdf(f);
+});
+/* ===== デッキCSV/TXTの読み込み（通信不要・最も確実） ===== */
+function importDeckTextFile(file){
+  const status = $("#pdfStatus");
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{ applyDeckFileText(String(fr.result)); }
+    catch(err){ status.textContent = "ファイルの解析に失敗しました：" + (err.message || err); }
+  };
+  fr.onerror = ()=>{ status.textContent = "ファイルを読めませんでした。"; };
+  fr.readAsText(file);
+}
+function splitCsv(line){
+  const out = []; let cur = ""; let q = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(q){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }
+        else q = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') q = true;
+      else if(ch === ","){ out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+function applyDeckFileText(text){
+  const status = $("#pdfStatus");
+  const out = {main: [], gr: [], hyper: []};
+  let deckName = "";
+  if(/(^|\n)\s*zone\s*[,\t]/i.test(text) || /^(main|gr|hyper)\s*[,\t]/im.test(text)){
+    // CSV/TSV形式: zone,count,name,civs,text
+    for(const raw of text.split(/\r?\n/)){
+      const line = raw.trim();
+      if(!line) continue;
+      const cols = line.includes("\t") ? line.split("\t") : splitCsv(line);
+      const zone = (cols[0] || "").trim().toLowerCase();
+      if(zone === "zone") continue;
+      if(zone === "name"){ deckName = (cols[2] || cols[1] || "").trim(); continue; }
+      if(!(zone in out)) continue;
+      const count = parseInt(cols[1], 10) || 1;
+      const name = (cols[2] || "").trim();
+      const civs = (cols[3] || "").trim();
+      const txt = (cols[4] || "").trim();
+      if(!name) continue;
+      out[zone].push((count > 1 ? count + " " : "") + name +
+        (civs ? ` [${civs}]` : "") + (txt ? ` || ${txt}` : ""));
+    }
+  } else if(/===\s*メインデッキ/.test(text)){
+    // Claudeが出力するブロック形式のtxt
+    let cur = null;
+    for(const raw of text.split(/\r?\n/)){
+      const line = raw.trim();
+      const nm = line.match(/デッキ名[：:](.+)$/);
+      if(nm){ deckName = nm[1].replace(/（.*?）/g, "").trim(); continue; }
+      if(/^===/.test(line)){
+        cur = /メイン/.test(line) ? "main" : /GR/i.test(line) ? "gr" : /超次元/.test(line) ? "hyper" : null;
+        continue;
+      }
+      if(!cur || !line || /^[■（(※]/.test(line)) continue;
+      out[cur].push(line);
+    }
+  } else {
+    for(const raw of text.split(/\r?\n/)){
+      const line = raw.trim();
+      if(line) out.main.push(line);
+    }
+  }
+  if(out.main.length === 0) throw new Error("カードの行が見つかりませんでした");
+  $("#taMain").value = out.main.join("\n");
+  $("#taGR").value = out.gr.join("\n");
+  $("#taHyper").value = out.hyper.join("\n");
+  if(deckName) $("#deckNameInput").value = deckName;
+  const c = id => sumCounts(parseList($(id).value));
+  status.textContent = `デッキファイルを読み込みました：メイン${c("#taMain")}枚 / GR${c("#taGR")}枚 / 超次元${c("#taHyper")}枚。「このデッキで始める」を押してください。`;
+}
+async function importDeckSheetImage(file){
+  const status = $("#pdfStatus");
+  status.textContent = "画像を解析中…";
+  let aiErr = null;
+  try{
+    const b64 = await fileToBase64(file);
+    await aiReadDeckSheet(b64, file.type || "image/jpeg", status);
+    return;
+  }catch(e){ aiErr = e; }
+  status.textContent = "AI読み取りが使えません（" + (aiErr.message || aiErr) + "）。文字認識（OCR）に切り替えます…";
+  const img = new Image();
+  img.onload = async ()=>{
+    try{
+      const cv = document.createElement("canvas");
+      const sc = 2000 / img.width;
+      cv.width = 2000;
+      cv.height = Math.round(img.height * sc);
+      const cx = cv.getContext("2d");
+      cx.imageSmoothingQuality = "high";
+      cx.drawImage(img, 0, 0, cv.width, cv.height);
+      await ocrCanvasSheet(cv, status);
+    }catch(err){
+      status.textContent = "読み取りに失敗しました（画像解析）：" + (err.message || err);
+    }
+    URL.revokeObjectURL(img.src);
+  };
+  img.onerror = ()=>{ status.textContent = "画像を開けませんでした。"; };
+  img.src = URL.createObjectURL(file);
+}
+
+/* ============ デッキの保存（端末のブラウザに記憶） ============ */
+function storageOK(){
+  try{
+    localStorage.setItem("__dmtest","1");
+    localStorage.removeItem("__dmtest");
+    return true;
+  }catch(e){ return false; }
+}
+function loadSavedDecks(){
+  try{ return JSON.parse(localStorage.getItem("dmSoloDecks") || "{}"); }
+  catch(e){ return {}; }
+}
+function renderSavedList(){
+  const list = $("#savedList");
+  const note = $("#saveNote");
+  if(!storageOK()){
+    list.innerHTML = "";
+    note.textContent = "この環境では保存機能が使えません（プレビュー画面など）。ファイルをブラウザで直接開くか、ネット公開後のページでは保存できます。";
+    return;
+  }
+  note.textContent = "保存先はこの端末のこのブラウザ内です。デッキリスト自体のバックアップはメモアプリにも残しておくと安心です。";
+  const decks = loadSavedDecks();
+  const names = Object.keys(decks);
+  if(names.length === 0){ list.innerHTML = "<span style='color:var(--sub)'>保存されたデッキはまだありません。</span>"; return; }
+  list.innerHTML = "";
+  for(const name of names){
+    const row = document.createElement("div");
+    row.className = "deck-item";
+    row.innerHTML = `<span class="nm">${escapeHtml(name)}</span>
+      <button class="small" data-load="${escapeHtml(name)}">読み込む</button>
+      <button class="small" data-del="${escapeHtml(name)}">削除</button>`;
+    list.appendChild(row);
+  }
+  list.querySelectorAll("[data-load]").forEach(b=>{
+    b.onclick = ()=>{
+      const d = loadSavedDecks()[b.dataset.load];
+      if(!d) return;
+      $("#taMain").value = d.main || "";
+      $("#taGR").value = d.gr || "";
+      $("#taHyper").value = d.hyper || "";
+      $("#deckNameInput").value = b.dataset.load;
+    };
+  });
+  list.querySelectorAll("[data-del]").forEach(b=>{
+    b.onclick = ()=>{
+      const decks = loadSavedDecks();
+      delete decks[b.dataset.del];
+      localStorage.setItem("dmSoloDecks", JSON.stringify(decks));
+      renderSavedList();
+    };
+  });
+}
+$("#btnSaveDeck").onclick = ()=>{
+  if(!storageOK()){ renderSavedList(); return; }
+  const name = $("#deckNameInput").value.trim();
+  if(!name){ $("#deckNameInput").style.borderColor = "#ff6060"; return; }
+  $("#deckNameInput").style.borderColor = "";
+  const decks = loadSavedDecks();
+  decks[name] = {
+    main: $("#taMain").value,
+    gr: $("#taGR").value,
+    hyper: $("#taHyper").value
+  };
+  localStorage.setItem("dmSoloDecks", JSON.stringify(decks));
+  renderSavedList();
+};
+renderSavedList();
+
+/* ============ デッキ画像の読み込み（カードの絵を切り出す） ============ */
+$("#btnImgLink").onclick = ()=>{
+  const url = $("#shareUrlInput").value.trim();
+  const m = url.match(/deck_id=([0-9a-f-]{30,})/i) || url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  const link = $("#imgLink");
+  if(!m){
+    link.style.display = "none";
+    $("#imgStatus").textContent = "URLからデッキIDを見つけられませんでした。共有URLをそのまま貼り付けてください。";
+    return;
+  }
+  link.href = "https://storage.googleapis.com/gachi-matome-deck-images/" + m[1] + ".jpg";
+  link.style.display = "inline";
+  $("#imgStatus").textContent = "リンクを開いて画像を保存し、下のファイル選択から読み込んでください。";
+};
+function sumCounts(list){ return list.reduce((a,e)=> a + e.count, 0); }
+$("#imgInput").addEventListener("change", e=>{
+  const f = e.target.files[0];
+  e.target.value = "";
+  if(!f) return;
+  const status = $("#imgStatus");
+  status.textContent = "画像を解析中…";
+  const img = new Image();
+  img.onload = ()=>{
+    try{ processDeckImage(img); }
+    catch(err){ status.textContent = "解析に失敗しました：" + err.message; }
+    URL.revokeObjectURL(img.src);
+  };
+  img.onerror = ()=>{ status.textContent = "画像を開けませんでした。"; };
+  img.src = URL.createObjectURL(f);
+});
+function processDeckImage(img){
+  const status = $("#imgStatus");
+  const mainList = parseList($("#taMain").value);
+  if(mainList.length === 0){
+    status.textContent = "先にメインデッキのリストを入力（またはPDF読み込み）してください。";
+    return;
+  }
+  const mainN = sumCounts(mainList);
+  const grN = sumCounts(parseList($("#taGR").value));
+  const hyN = sumCounts(parseList($("#taHyper").value));
+
+  // 解析用に縮小して非白ピクセルの連結成分を探す
+  const scale = Math.min(1, 900 / img.width);
+  const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext("2d", {willReadFrequently:true});
+  cx.drawImage(img, 0, 0, w, h);
+  const d = cx.getImageData(0, 0, w, h).data;
+  const mask = new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++){
+    if(d[i*4] < 232 || d[i*4+1] < 232 || d[i*4+2] < 232) mask[i] = 1;
+  }
+  const label = new Int32Array(w*h).fill(-1);
+  const comps = [];
+  const stack = [];
+  for(let p0=0;p0<w*h;p0++){
+    if(!mask[p0] || label[p0] >= 0) continue;
+    const id = comps.length;
+    let minx=p0%w, maxx=minx, miny=(p0/w)|0, maxy=miny, area=0;
+    stack.length = 0; stack.push(p0); label[p0] = id;
+    while(stack.length){
+      const q = stack.pop(); area++;
+      const qx = q % w, qy = (q / w) | 0;
+      if(qx<minx)minx=qx; if(qx>maxx)maxx=qx;
+      if(qy<miny)miny=qy; if(qy>maxy)maxy=qy;
+      if(qx>0   && mask[q-1] && label[q-1]<0){ label[q-1]=id; stack.push(q-1); }
+      if(qx<w-1 && mask[q+1] && label[q+1]<0){ label[q+1]=id; stack.push(q+1); }
+      if(qy>0   && mask[q-w] && label[q-w]<0){ label[q-w]=id; stack.push(q-w); }
+      if(qy<h-1 && mask[q+w] && label[q+w]<0){ label[q+w]=id; stack.push(q+w); }
+    }
+    comps.push({minx, maxx, miny, maxy, area});
+  }
+  // カードらしい箱だけ残す（縦長・十分な大きさ・中身が詰まっている）
+  let cand = comps.filter(b=>{
+    const bw = b.maxx-b.minx+1, bh = b.maxy-b.miny+1;
+    if(bw < w*0.04 || bh < w*0.05) return false;
+    const ar = bw/bh;
+    if(ar < 0.55 || ar > 0.9) return false;
+    return b.area/(bw*bh) > 0.5;
+  });
+  if(cand.length < 5){ status.textContent = "カードの枠を見つけられませんでした。デッキ画像（白背景にカードが並んだもの）か確認してください。"; return; }
+  const med = arr => arr.slice().sort((a,b)=>a-b)[Math.floor(arr.length/2)];
+  const mw = med(cand.map(b=>b.maxx-b.minx+1));
+  cand = cand.filter(b=>{
+    const bw = b.maxx-b.minx+1;
+    return bw > mw*0.75 && bw < mw*1.25;
+  });
+  // 左ブロック（メイン）と右ブロック（GR/超次元）に分ける
+  cand.forEach(b=>{ b.cx=(b.minx+b.maxx)/2; b.cy=(b.miny+b.maxy)/2; });
+  const xs = [...new Set(cand.map(b=>Math.round(b.cx/(mw*0.6))))].sort((a,b)=>a-b);
+  let splitX = null;
+  const sorted = cand.slice().sort((a,b)=>a.cx-b.cx);
+  for(let i=1;i<sorted.length;i++){
+    const gap = sorted[i].cx - sorted[i-1].cx;
+    if(gap > mw*1.6){ splitX = (sorted[i].cx + sorted[i-1].cx)/2; break; }
+  }
+  const left  = cand.filter(b=> splitX===null || b.cx < splitX);
+  const right = splitX===null ? [] : cand.filter(b=> b.cx >= splitX);
+  const mh = med(cand.map(b=>b.maxy-b.miny+1));
+  const orderGrid = arr => arr.slice().sort((a,b)=>{
+    const ra = Math.round(a.cy/(mh*0.8)), rb = Math.round(b.cy/(mh*0.8));
+    return ra!==rb ? ra-rb : a.cx-b.cx;
+  });
+  const L = orderGrid(left), R = orderGrid(right);
+  // 元解像度から切り出し
+  const crop = b=>{
+    const sx=b.minx/scale, sy=b.miny/scale;
+    const sw=(b.maxx-b.minx+1)/scale, sh=(b.maxy-b.miny+1)/scale;
+    const tw=220, th=Math.round(tw*sh/sw);
+    const c2=document.createElement("canvas");
+    c2.width=tw; c2.height=th;
+    c2.getContext("2d").drawImage(img, sx,sy,sw,sh, 0,0,tw,th);
+    return c2.toDataURL("image/jpeg", 0.82);
+  };
+  deckArt = {main: L.map(crop), gr: R.slice(0, grN).map(crop), hyper: R.slice(grN).map(crop)};
+  let msg = `画像から ${L.length+R.length} 枚を切り出しました（メイン側${L.length}・右側${R.length}）。`;
+  if(L.length !== mainN || R.length !== grN+hyN){
+    msg += ` リストの枚数（メイン${mainN}・GR${grN}・超次元${hyN}）と一致しないため、順番がずれる可能性があります。`;
+  }
+  msg += "「このデッキで始める」を押すと絵柄付きで配られます。";
+  status.textContent = msg;
+}
+
+document.addEventListener("contextmenu", e=> e.preventDefault());
+renderAll();
+</script>
+</body>
+</html>
