@@ -454,7 +454,14 @@ function buildCards(){
     for(let i=0;i<entry.count;i++){
       const id = "c"+(nextId++);
       const art = (deckArt[origin]||[])[artIdx[origin]++] || null;
-      cards[id] = {id, name:entry.name, text:entry.text, civs:entry.civs||[], art, faceUp:false, tapped:false, origin};
+      const card = {id, name:entry.name, text:entry.text, civs:entry.civs||[], art, faceUp:false, tapped:false, origin};
+      if(origin === "hyper"){
+        // 超次元カードは表裏が別カード。半角/で表(front)・裏(back)を区切る
+        const parts = entry.name.split("/");
+        card.front = (parts[0] || entry.name).trim();
+        card.back  = (parts[1] || parts[0] || entry.name).trim();
+      }
+      cards[id] = card;
       ids.push(id);
     }
     return ids;
@@ -670,8 +677,11 @@ function shouldAutoSeal(ctx){
 function cardEl(id, ctx){
   const c = cards[id];
   const el = document.createElement("div");
-  el.className = "card " + (c.faceUp ? "faceup" : "facedown") + (c.tapped ? " tapped" : "");
-  if(c.faceUp){
+  const isHyper = c.origin === "hyper";
+  // 超次元カードは「裏面」も別カードとして表向き表示する
+  const showFace = isHyper ? true : c.faceUp;
+  el.className = "card " + (showFace ? "faceup" : "facedown") + (c.tapped ? " tapped" : "");
+  if(showFace){
     applyCivStyle(el, c);
     if(c.art){
       el.classList.add("hasart");
@@ -679,7 +689,7 @@ function cardEl(id, ctx){
     }
     const nm = document.createElement("div");
     nm.className = "cname";
-    nm.textContent = c.name;
+    nm.textContent = isHyper ? (c.faceUp ? c.front : c.back) : c.name;
     el.appendChild(nm);
   }
   attachPointer(el, ctx);
@@ -688,12 +698,14 @@ function cardEl(id, ctx){
 function staticCardEl(id){
   const c = cards[id];
   const el = document.createElement("div");
-  el.className = "card " + (c.faceUp ? "faceup" : "facedown");
-  if(c.faceUp){
+  const isHyper = c.origin === "hyper";
+  const showFace = isHyper ? true : c.faceUp;
+  el.className = "card " + (showFace ? "faceup" : "facedown");
+  if(showFace){
     applyCivStyle(el, c);
     if(c.art){ el.classList.add("hasart"); el.style.backgroundImage = `url(${c.art})`; }
     const nm = document.createElement("div");
-    nm.className = "cname"; nm.textContent = c.name;
+    nm.className = "cname"; nm.textContent = isHyper ? (c.faceUp ? c.front : c.back) : c.name;
     el.appendChild(nm);
   }
   return el;
@@ -863,13 +875,7 @@ function attachPointer(el, ctx){
     el._capturedId = e.pointerId;
     drag = {ctx, el, moved:false, longFired:false,
             startX:e.clientX, startY:e.clientY,
-            longTimer: setTimeout(()=>{
-              if(drag && !drag.moved){
-                drag.longFired = true;
-                onLongPress(ctx);
-                vibrate(30);
-              }
-            }, 550)};
+            longTimer: null};
   });
   el.addEventListener("pointermove", e=>{
     if(!drag || drag.el!==el || drag.longFired) return;
@@ -988,24 +994,29 @@ function handleTap(ctx){
   }
 }
 function onSingleTap(ctx){
+  // 山札・超GR・超次元の「山」は従来どおりメニューを開く
   if(ctx.kind === "deckpile"){ openDeckMenu(); return; }
   if(ctx.kind === "grpile"){ openGRMenu(); return; }
   if(ctx.kind === "hyperpile"){ openHyperMenu(); return; }
-  if(ctx.kind === "shieldstack"){
-    const sh = findShield(ctx.shieldId);
-    if(!sh) return;
-    if(sh.cardIds.length > 1){ openShieldModal(ctx.shieldId); }
-    else { openCardModal({kind:"shieldcard", shieldId:ctx.shieldId, cardId:sh.cardIds[0]}); }
-    return;
-  }
-  openCardModal(ctx);
+  // それ以外のカードは1回クリックでタップ／アンタップ
+  const c = cards[ctx.cardId];
+  if(c){ c.tapped = !c.tapped; renderAll(); }
 }
 function onDoubleTap(ctx){
   if(ctx.kind === "deckpile"){ draw(); return; }
   if(ctx.kind === "grpile"){ grSummon(); return; }
   if(ctx.kind === "hyperpile"){ hyperToBattle(Z.hyper[0]); return; }
   const c = cards[ctx.cardId];
-  if(c){ c.tapped = !c.tapped; renderAll(); }
+  if(!c) return;
+  c.faceUp = !c.faceUp;
+  // 再描画でカード要素が作り直されるため、先にポインタ捕捉を解放してドラッグ状態を破棄する
+  if(drag && drag.el){
+    try{ drag.el.releasePointerCapture(drag.el._capturedId); }catch(e){}
+  }
+  cleanupDrag();
+  lastTap = {key:"", time:0};
+  clearTimeout(pendingSingle); pendingSingle = null;
+  renderAll();
 }
 function onLongPress(ctx){
   if(ctx.kind === "deckpile" || ctx.kind === "grpile" || ctx.kind === "hyperpile") return;
