@@ -347,7 +347,7 @@
   <label>デッキ名</label>
   <input id="deckName" placeholder="例：リアル所持順ハイランダー"
     style="width:100%;font:inherit;font-size:14px;background:#0d1626;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px">
-  <label>メインデッキ（40枚）</label>
+  <label>メインデッキ（40枚）　<span id="mainCount" style="color:var(--accent2);font-weight:normal">現在 0 枚</span></label>
   <textarea id="taMain" spellcheck="false"></textarea>
   <label>超GRゾーン（使う場合のみ・12枚）</label>
   <textarea id="taGR" style="min-height:90px" spellcheck="false"></textarea>
@@ -475,7 +475,10 @@ function buildCards(){
 
 /* ============ 初期配置 ============ */
 function isStartInBattle(name){
-  return /禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name) || /零龍/.test(name);
+  if(/禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name)) return true;
+  if(/ドキンダム[xX]$/.test(name) || /ドルマゲドン[xX]$/.test(name)) return true;
+  if(name === "零龍") return true;
+  return false;
 }
 function needsSixSeals(name){
   return /禁断.*封印されし/.test(name) || /FORBIDDEN\s*STAR/i.test(name);
@@ -1778,6 +1781,15 @@ renderSavedList();
 
 document.addEventListener("contextmenu", e=> e.preventDefault());
 renderAll();
+
+/* ============ メインデッキの現在枚数表示 ============ */
+function updateMainCount(){
+  const el = $("#mainCount");
+  if(!el) return;
+  el.textContent = `現在 ${sumCounts(parseList($("#taMain").value))} 枚`;
+}
+$("#taMain").addEventListener("input", updateMainCount);
+updateMainCount();
 </script>
 </body>
 </html>
