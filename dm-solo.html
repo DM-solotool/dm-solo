@@ -124,6 +124,12 @@
   }
   .card.tapped{transform:rotate(90deg);}
   .card.tapped.faceup{filter:brightness(.85);}
+  .pile .deck-shifted{
+    position:absolute; top:0;
+    left:calc(var(--cw) * -0.5);   /* バトルゾーン方向(左)へカード半分ずらす */
+    pointer-events:none; z-index:-1; /* 山の下から出っ張って見えるよう背面に */
+  }
+  .card.sideways.tapped{transform:rotate(90deg);}
   .drag-src{opacity:.25; pointer-events:none;}
 
   /* バトルゾーンのスタック */
@@ -275,14 +281,11 @@
   .link-group{
     position:absolute; z-index:1;
     border:2px solid var(--accent2); border-radius:8px;
-    padding:3px; gap:3px;
-    display:flex; flex-wrap:wrap;
     background:rgba(0,0,0,.25);
     touch-action:none;
-    cursor:grab;
   }
-  .link-group:active{cursor:grabbing;}
-  .link-group .stack{position:relative; left:auto !important; top:auto !important; z-index:auto;}
+  /* グループ内の各カードはJSが設定したleft/topで絶対配置（重ならず自由形に） */
+  .link-group > .stack{ position:absolute; }
 
   /* ===== デッキ入力テーブル ===== */
   .dk-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px;}
@@ -324,7 +327,12 @@
   .dk-dual-head{font-size:9px;color:var(--sub);padding:1px 2px;text-align:center;}
 
   /* 開始時カード裏面のカード名表示 */
-  .card.start-back{ background-image:none !important; }
+  .card.start-back{
+    background-image:none !important;
+    background:var(--card-face) !important;
+    border:1px solid #b9ad8e;
+  }
+  .card.start-back[style*="background"]{ /* applyCivStyleのインライン背景を尊重 */ }
   .card.start-back .cname{
     position:absolute; inset:2px;
     font-size:max(6px, calc(var(--cw) * 0.18));
@@ -334,6 +342,24 @@
   }
   .link-group .stack{ pointer-events:auto; }
   .link-group .seals .card{ pointer-events:auto; }
+  /* グループ内の封印：横向き・大きくずらしてはみ出させ、個別タッチ可能に */
+  .seals-link{ pointer-events:none; z-index:5; overflow:visible; }
+  .seal-link{ transform:rotate(90deg) !important; pointer-events:auto !important; z-index:6; }
+  .seal-link.tapped{ transform:rotate(180deg) !important; }
+  /* リンク解除タブ */
+  .link-tabs{
+    position:absolute; top:-17px; left:0; display:flex; gap:3px;
+    z-index:10; pointer-events:none;
+  }
+  .link-tab{
+    font-size:10px; font-weight:700; padding:1px 7px;
+    border-radius:5px 5px 0 0; cursor:pointer; pointer-events:auto;
+    white-space:nowrap; color:#04121f;
+  }
+  .link-tab.tab-move{ background:#7fd1ff; cursor:grab; }
+  .link-tab.tab-tap{ background:#ffd23f; }
+  .link-tab.tab-unlink{ background:#ff9a8a; }
+  .link-tab:active{ filter:brightness(.9); }
   .card.multi-sel{ outline:3px solid #ffd23f; outline-offset:1px; box-shadow:0 0 8px #ffd23f; }
   #multiBar{
     position:fixed; left:0; right:0; bottom:0; z-index:1200;
@@ -352,10 +378,11 @@
   <button id="btnShuffle">シャッフル</button>
   <button id="btnDraw">ドロー</button>
   <button id="btnMana">マナ加速</button>
+  <button id="btnToGrave">墓地</button>
   <button id="btnViewDeck">山札を見る</button>
   <button id="btnMultiSelect">複数枚選ぶ</button>
   <button id="btnDeckEdit" class="small">デッキ変更</button>
-  <span class="size-ctl">カード<input type="range" id="sizeRange" min="22" max="64" value="28"></span>
+  <span class="size-ctl">大きさ<input type="range" id="sizeRange" min="22" max="64" value="43"></span>
 </header>
 
 <main>
@@ -365,7 +392,7 @@
     </section>
     <aside class="piles">
       <div class="drop-strip" data-drop="decktop">▲ 山札の上</div>
-      <div class="pile" id="deckPile"></div>
+      <div class="pile" id="deckPile" data-drop="deckinsert"></div>
       <div class="pile-name">山札</div>
       <div class="drop-strip" data-drop="deckbottom">▼ 山札の下</div>
       <div style="height:6px"></div>
@@ -416,6 +443,7 @@
   <h2>デッキを入力</h2>
   <div class="note" style="margin:8px 0">
     <b>ファイルから読み込む</b>（CSV/TXT は通信不要。PDF/画像は文字認識で読み取り）<br>
+    <div style="margin-top:6px;color:var(--accent);font-size:12px">AIによるデッキリスト画像読み込みは精度に限度があるので、読み込み後にデッキ内容を調整してください。</div>
     <input type="file" id="pdfInput" accept=".csv,.txt,text/plain,text/csv,application/pdf,image/*" style="margin-top:6px;color:var(--txt)">
     <div id="pdfStatus" style="margin-top:4px;color:var(--accent2)"></div>
     <div style="margin-top:4px">※ CSV/TXTはそのまま読み込みます。PDF・公式シート画像を選ぶと文字認識（OCR）でカード名・<b>デッキ名</b>を読み取ります（初回は認識辞書の取得に通信が必要です。Claudeのプレビュー画面では動きません）。</div>
@@ -435,11 +463,11 @@
   <div id="mainTableWrap"></div>
 
   <!-- 超GR -->
-  <label style="display:block;margin:14px 0 4px;font-weight:700">超GRゾーン（使う場合のみ・12枚）</label>
+  <label style="display:block;margin:14px 0 4px;font-weight:700">超GRゾーン（使う場合のみ・12枚）　<span id="grCount" style="color:var(--accent2);font-weight:normal">現在 0 枚</span>　<span id="grCivCount" style="color:var(--sub);font-size:11px"></span></label>
   <div id="grTableWrap"></div>
 
   <!-- 超次元 -->
-  <label style="display:block;margin:14px 0 4px;font-weight:700">超次元ゾーン（使う場合のみ・8枚）</label>
+  <label style="display:block;margin:14px 0 4px;font-weight:700">超次元ゾーン（使う場合のみ・8枚）　<span id="hyperCount" style="color:var(--accent2);font-weight:normal">現在 0 枚</span>　<span id="hyperCivCount" style="color:var(--sub);font-size:11px"></span></label>
   <div id="hyperTableWrap"></div>
 
   <!-- ゲーム開始時に存在するカード -->
@@ -473,7 +501,7 @@
   </div>
   <p class="note" style="margin-top:14px">
     ※ 操作方法：<b>1回タップ</b>＝タップ・アンタップ／<b>2回タップ</b>＝裏返す／<b>押しながらスライド</b>＝移動<br>
-    ※ バトルゾーンのカードに別のカードを重ねると「上に重ねる／一番下に置く／封印」を選べます。
+    ※ バトルゾーンのカードに別のカードを重ねると「上に重ねる／一番下に置く／封印／リンクさせる」を選べます。
   </p>
 </div>
 
@@ -604,30 +632,13 @@ function initialSetup(){
   const built = buildCards();
   Z = newZones();
   nextStackId = 1; nextShieldId = 1;
-  const specials = [], deckIds = [];
-  for(const id of built.main){
-    if(isStartInBattle(cards[id].name)) specials.push(id);
-    else deckIds.push(id);
-  }
-  Z.deck = shuffle(deckIds);
+  // メインデッキの全カードを山札へ（旧：禁断などを判定してバトルゾーンへ置く処理は廃止。
+  // ゲーム開始時に存在するカードは、デッキ登録画面の専用欄から配置する）
+  Z.deck = shuffle(built.main.slice());
   Z.gr   = shuffle(built.gr);
   Z.hyper = built.hyper;
   for(const id of Z.hyper){ cards[id].faceUp = true; }
   const cw = parseInt(sizeRange.value,10);
-  let sx = 8;
-  for(const id of specials){
-    cards[id].faceUp = true; cards[id].tapped = false;
-    addStack([id], sx, 6);
-    const st = Z.battle[Z.battle.length-1];
-    if(needsSixSeals(cards[id].name)){
-      for(let k=0;k<6 && Z.deck.length;k++){
-        const sid = Z.deck.shift();
-        cards[sid].faceUp = false; cards[sid].tapped = false;
-        st.seals.push(sid);
-      }
-    }
-    sx += cw*2 + 28;
-  }
   // ゲーム開始時に存在するカードをバトルゾーンへ
   const startRows = (typeof getStartRows === "function") ? getStartRows() : [];
   if(startRows.length > 0){
@@ -661,15 +672,22 @@ function initialSetup(){
 function draw(){
   if(!Z.deck.length) return;
   const id = Z.deck.shift();
-  cards[id].faceUp = true; cards[id].tapped = false;
+  cards[id].faceUp = true; cards[id].tapped = false; cards[id].sideways = false;
   Z.hand.push(id);
   renderAll();
 }
 function manaCharge(){
   if(!Z.deck.length) return;
   const id = Z.deck.shift();
-  cards[id].faceUp = true; cards[id].tapped = false;
+  cards[id].faceUp = true; cards[id].tapped = false; cards[id].sideways = false;
   Z.mana.push(id);
+  renderAll();
+}
+function deckToGrave(){
+  if(!Z.deck.length) return;
+  const id = Z.deck.shift();
+  cards[id].faceUp = true; cards[id].tapped = false; cards[id].sideways = false;
+  Z.grave.push(id);
   renderAll();
 }
 function grSummon(){
@@ -700,7 +718,16 @@ function placeStartCards(startCards, cw){
   const isZero = startCards.some(sc=> /零龍/.test(sc.row.name2||"") || /零無/.test(sc.row.name||""));
   if((isDoru||isZero) && startCards.length>=5){
     // コア4枚を田の字（2×2）でリンク、本体は左に単体で置く
-    const anchor = {x: 8, y:8};
+    // 初期位置はバトルゾーン右下寄り（移動タブを押しやすくするため）
+    const bz = $("#battleZone");
+    const bzr = bz ? bz.getBoundingClientRect() : {width:600, height:300};
+    // 本体＋田の字＋封印カードのはみ出しを考慮した占有サイズ
+    const blockW = cw*4 + pad*8;        // 本体 + 田の字(2列) + 封印のはみ出し
+    const blockH = ch*2 + pad*2 + ch*0.5; // 田の字2段 + 封印の下方向はみ出し
+    // バトルゾーンの右下寄りだが、はみ出さないよう余白を広めに（中央右下あたり）
+    const marginR = Math.round(cw*1.2), marginB = Math.round(ch*0.8);
+    const anchor = {x: Math.max(8, bzr.width - blockW - marginR),
+                    y: Math.max(22, bzr.height - blockH - marginB)};
     const bodyCard = startCards[0]; // Forbidden Star / 零無
     const cores    = startCards.slice(1,5);  // コア/儀4枚
     // 本体をスタックとして追加
@@ -712,16 +739,41 @@ function placeStartCards(startCards, cw){
     const gy = anchor.y;
     // 田の字：TL, TR, BL, BR
     const offsets=[{x:0,y:0},{x:cw+pad,y:0},{x:0,y:ch+pad},{x:cw+pad,y:ch+pad}];
+    // 本体がForbidden Star（ドルマゲドン）なら各コアに封印を1つずつ付ける
+    const bodyNm = (bodyCard.row.name||"") + " " + (bodyCard.row.name2||"");
+    const isForbiddenStar = /Forbidden\s*Star|ドルマゲドン/i.test(bodyNm);
     cores.forEach((sc,i)=>{
       addStack([sc.id], gx+offsets[i].x, gy+offsets[i].y);
       const st=Z.battle[Z.battle.length-1];
       st.groupId = gid; st.groupLayout = "grid2x2";
+      if(isForbiddenStar && Z.deck.length){
+        const sid = Z.deck.shift();
+        cards[sid].faceUp = false; cards[sid].tapped = false;
+        st.seals.push(sid);
+      }
     });
   } else {
-    // 通常：横に並べる
-    let ox = 8;
+    // 通常：横に並べる（初期位置は右下寄り）
+    const bz = $("#battleZone");
+    const bzr = bz ? bz.getBoundingClientRect() : {width:600, height:300};
+    // 封印6枚が右下方向に斜めに広がるぶんの余白を確保
+    const totalW = startCards.length*(cw+pad*3) + cw*0.6;
+    const sealSpread = ch*0.6;
+    const marginR = Math.round(cw*1.2), marginB = Math.round(ch*0.8);
+    let ox = Math.max(8, bzr.width - totalW - marginR);
+    const oy = Math.max(22, bzr.height - ch - sealSpread - marginB);
     for(const sc of startCards){
-      addStack([sc.id], ox, 8);
+      addStack([sc.id], ox, oy);
+      const st = Z.battle[Z.battle.length-1];
+      // 禁断の鼓動：初期状態で山札の上から6枚を封印として付ける
+      const nm = (sc.row.name||"") + " " + (sc.row.name2||"");
+      if(/禁断の鼓動|ドキンダム/.test(nm)){
+        for(let k=0;k<6 && Z.deck.length;k++){
+          const sid = Z.deck.shift();
+          cards[sid].faceUp = false; cards[sid].tapped = false;
+          st.seals.push(sid);
+        }
+      }
       ox += cw + pad*3;
     }
   }
@@ -869,9 +921,10 @@ function cardEl(id, ctx, noPointer){
                    : c.name;
     el.appendChild(nm);
   } else if(isStart){
-    // 開始時カードの裏面：裏面の文明色を付け、裏カード名を黒文字で表示
+    // 開始時カードの裏面：紙色ベース＋（文明があれば）文明色、裏カード名を黒文字で表示
     el.classList.add("start-back");
-    applyCivStyle(el, c, c.civsBack||c.civs);
+    const bcivs = c.civsBack || [];
+    if(bcivs.length){ el.style.setProperty("background", civBackground(bcivs), "important"); el.style.borderColor = civBorder(bcivs); }
     const nm = document.createElement("div");
     nm.className = "cname";
     nm.textContent = c.back || c.name;
@@ -900,7 +953,8 @@ function staticCardEl(id){
     el.appendChild(nm);
   } else if(isStart){
     el.classList.add("start-back");
-    applyCivStyle(el, c, c.civsBack||c.civs);
+    const bcivs = c.civsBack || [];
+    if(bcivs.length){ el.style.setProperty("background", civBackground(bcivs), "important"); el.style.borderColor = civBorder(bcivs); }
     const nm = document.createElement("div");
     nm.className = "cname";
     nm.textContent = c.back || c.name;
@@ -910,6 +964,17 @@ function staticCardEl(id){
 }
 const CIV_BG = {"光":"#f4ecc0","水":"#cfe5f7","闇":"#c9c0d6","火":"#f5cfc0","自然":"#cfe3c0","ゼロ":"#e3e3e3"};
 const CIV_BD = {"光":"#cdb247","水":"#3f8fd4","闇":"#6a5a8a","火":"#d45a3f","自然":"#5a9a4a","ゼロ":"#9a9a9a"};
+function civBackground(cs){
+  if(!cs || !cs.length) return "";
+  if(cs.length===1) return CIV_BG[cs[0]] || "";
+  const n = cs.length;
+  const segs = cs.map((cv,i)=>`${CIV_BG[cv]||"#eee"} ${Math.round(100*i/n)}% ${Math.round(100*(i+1)/n)}%`).join(", ");
+  return `linear-gradient(135deg, ${segs})`;
+}
+function civBorder(cs){
+  if(!cs || !cs.length) return "";
+  return cs.length===1 ? (CIV_BD[cs[0]]||"") : "#c9a23f";
+}
 function applyCivStyle(el, c, civsOverride){
   const cs = civsOverride || c.civs || [];
   if(cs.length===0) return;
@@ -947,48 +1012,84 @@ function renderBattle(){
     const grpEl = document.createElement("div");
     grpEl.className = "link-group";
     grpEl.style.left = anchor.x + "px";
-    grpEl.style.top  = anchor.y + "px";
-    grpEl.dataset.group = gid;
-    grpEl.setAttribute("data-drop","stack"); // グループ全体もドロップ先になる
-    grpEl.style.cursor = "grab";
-    // layout: "田の字"（2×2）か横一列か
-    const layout = members[0].groupLayout || "row";
-    if(layout === "grid2x2"){
-      grpEl.style.display = "grid";
-      grpEl.style.gridTemplateColumns = "repeat(2, var(--cw))";
-    } else if(layout === "col"){
-      grpEl.style.display = "flex";
-      grpEl.style.flexDirection = "column";
-      grpEl.style.flexWrap = "nowrap";
-    } else {
-      grpEl.style.display = "flex";
-      grpEl.style.flexDirection = "row";
-      grpEl.style.flexWrap = "nowrap";
+    // 上部の操作タブ(約18px)がバトルゾーン上端からはみ出さないよう、最小yを確保
+    const TABH = 22;
+    if(anchor.y < TABH){
+      const dyy = TABH - anchor.y;
+      Z.battle.filter(s=>s.groupId===gid).forEach(m=>{ m.y = (m.y||0) + dyy; });
     }
+    grpEl.style.top  = (Math.max(TABH, anchor.y)) + "px";
+    grpEl.dataset.group = gid;
+    grpEl.setAttribute("data-drop","stack");
+    // 操作タブ（移動／タップ／解除）。これら以外＝個別カードは個別に作用する
+    const tabBar = document.createElement("div");
+    tabBar.className = "link-tabs";
+    const mkTab = (label, cls, handler, isDrag)=>{
+      const t = document.createElement("div");
+      t.className = "link-tab " + cls;
+      t.textContent = label;
+      if(isDrag){ attachGroupDragTab(t, gid); }
+      else {
+        t.addEventListener("pointerdown", ev=> ev.stopPropagation());
+        t.onclick = (ev)=>{ ev.stopPropagation(); handler(); };
+      }
+      return t;
+    };
+    tabBar.appendChild(mkTab("移動", "tab-move", null, true));
+    tabBar.appendChild(mkTab("タップ", "tab-tap", ()=>{
+      const ms = Z.battle.filter(s2=>s2.groupId===gid);
+      const anyUn = ms.some(m=> m.cardIds.some(cid=> !cards[cid].tapped));
+      ms.forEach(m=> m.cardIds.forEach(cid=>{ cards[cid].tapped = anyUn; }));
+      renderAll();
+    }, false));
+    tabBar.appendChild(mkTab("解除", "tab-unlink", ()=>{ unlinkGroup(gid); renderAll(); }, false));
+    grpEl.appendChild(tabBar);
+
+    // 各カードはグループ内オフセット(gx,gy)で絶対配置（L字など自由形に対応）
+    relayoutGroup(gid);
+    const GPAD = 10;
+    let maxX=0, maxY=0;
+    const cwv = parseInt(sizeRange.value,10), chv = Math.round(cwv*1.4);
+    members.forEach(m=>{ maxX=Math.max(maxX,(m.gx||0)+cwv); maxY=Math.max(maxY,(m.gy||0)+chv); });
+    grpEl.style.width  = (maxX + GPAD*2) + "px";
+    grpEl.style.height = (maxY + GPAD*2) + "px";
     for(const m of members){
       const sEl = document.createElement("div");
       sEl.className = "stack";
+      sEl.style.position = "absolute";
+      sEl.style.left = ((m.gx||0) + GPAD) + "px";
+      sEl.style.top  = ((m.gy||0) + GPAD) + "px";
       sEl.dataset.stack = m.id;
       sEl.setAttribute("data-drop","stack");
       const topId = m.cardIds[0];
-      const ce = cardEl(topId, {kind:"stacktop", stackId:m.id, cardId:topId}, true);
+      // 個別カードは通常スタックと同じ操作（attachPointer）→ 個別にタップ/裏返し/ドラッグ/ドロップ先
+      const ce = cardEl(topId, {kind:"stacktop", stackId:m.id, cardId:topId});
+      ce.setAttribute("data-drop","stack");
+      ce.dataset.stack = m.id;
       sEl.appendChild(ce);
       if(m.seals && m.seals.length){
-        const sl = document.createElement("div"); sl.className="seals";
+        const sl = document.createElement("div"); sl.className="seals seals-link";
         m.seals.forEach((sid,i)=>{
-          const se=cardEl(sid,{kind:"seal",stackId:m.id,cardId:sid}, true);
-          se.style.left=(4+i*6)+"px"; se.style.top=(-6+i*5)+"px";
+          const se=cardEl(sid,{kind:"seal",stackId:m.id,cardId:sid});
+          se.classList.add("seal-link");
+          se.style.left=(10 + i*14)+"px"; se.style.top=(14 + i*10)+"px";
           const mk=document.createElement("div"); mk.className="seal-mark"; mk.textContent="封";
           se.appendChild(mk); sl.appendChild(se);
         });
         sEl.appendChild(sl);
       }
-      // 各メンバーカードに「ドラッグ=グループ移動／タップ=個別メニュー」を付与
-      attachGroupMemberPointer(ce, gid, m.id, topId);
+      // 個別カードの下に重なり（under）も表示
+      if(m.cardIds.length > 1){
+        const unders = document.createElement("div");
+        unders.className = "stack-unders";
+        for(const uid of m.cardIds.slice(1)){
+          unders.appendChild(cardEl(uid, {kind:"under", stackId:m.id, cardId:uid}));
+        }
+        sEl.appendChild(unders);
+      }
       grpEl.appendChild(sEl);
       rendered.add(m.id);
     }
-    attachGroupPointer(grpEl, gid);
     bz.appendChild(grpEl);
   }
 
@@ -1058,6 +1159,14 @@ function renderPiles(){
     el.className = "card facedown";
     attachPointer(el, {kind:"deckpile"});
     dp.appendChild(el);
+    // 山札内で「ずらし」指定されたカードがあれば、裏向きのまま
+    // バトルゾーン方向(左)へカード半分ずらして表示（山の下から出っ張って見える）
+    const anyShift = Z.deck.some(id=> cards[id] && cards[id].sideways);
+    if(anyShift){
+      const se = document.createElement("div");
+      se.className = "card facedown deck-shifted";
+      dp.appendChild(se);
+    }
   }
   const dc = document.createElement("div");
   dc.className = "count"; dc.textContent = Z.deck.length;
@@ -1120,6 +1229,38 @@ function relayoutZones(){
 }
 
 /* ============ リンクグループ移動 ============ */
+/* 「移動」タブをドラッグするとグループ全体が動く */
+function attachGroupDragTab(tabEl, gid){
+  tabEl.style.touchAction = "none";
+  let st = null;
+  tabEl.addEventListener("pointerdown", e=>{
+    e.preventDefault(); e.stopPropagation();
+    tabEl.setPointerCapture(e.pointerId);
+    tabEl._capId = e.pointerId;
+    const grp = Z.battle.find(s=>s.groupId===gid);
+    st = {startX:e.clientX, startY:e.clientY, ox: grp?grp.x:0, oy: grp?grp.y:0, moved:false};
+  });
+  tabEl.addEventListener("pointermove", e=>{
+    if(!st) return;
+    const dx=e.clientX-st.startX, dy=e.clientY-st.startY;
+    if(!st.moved && Math.hypot(dx,dy)<6) return;
+    st.moved=true;
+    const bz=$("#battleZone"); if(!bz) return;
+    const bzr=bz.getBoundingClientRect();
+    const grpEl = tabEl.closest(".link-group");
+    const nx=Math.max(0,Math.min(bzr.width-(grpEl?grpEl.offsetWidth:0), st.ox+dx));
+    const ny=Math.max(22,Math.min(bzr.height-(grpEl?grpEl.offsetHeight:0), st.oy+dy));
+    if(grpEl){ grpEl.style.left=nx+"px"; grpEl.style.top=ny+"px"; }
+    Z.battle.filter(s=>s.groupId===gid).forEach(m=>{ m.x=nx; m.y=ny; });
+  });
+  tabEl.addEventListener("pointerup", e=>{
+    const moved = st && st.moved;
+    st=null;
+    try{ tabEl.releasePointerCapture(tabEl._capId); }catch(_){}
+    if(moved) renderAll();
+  });
+  tabEl.addEventListener("pointercancel", ()=>{ st=null; });
+}
 function attachGroupPointer(el, gid){
   let gDrag = null;
   el.style.touchAction = "none";
@@ -1198,13 +1339,14 @@ function handleMemberTap(cardId, stackId, gid){
   if(lastMemberTap.key === cardId && now - lastMemberTap.time < 320){
     clearTimeout(pendingMemberTap); pendingMemberTap=null;
     lastMemberTap = {key:"", time:0};
-    // ダブルタップ：このカード個別のリンクメニュー
-    openLinkedCardMenu(cardId, stackId, gid);
+    // ダブルタップ：この個別カードを裏返す
+    const c = cards[cardId];
+    if(c){ c.faceUp = !c.faceUp; renderAll(); }
   }else{
     lastMemberTap = {key:cardId, time:now};
     clearTimeout(pendingMemberTap);
     pendingMemberTap = setTimeout(()=>{
-      // シングルタップ：このカードだけタップ/アンタップ
+      lastMemberTap = {key:"", time:0};  // シングル確定後はリセット（次タップを正しくシングル判定）
       const c = cards[cardId];
       if(c){ c.tapped = !c.tapped; renderAll(); }
     }, 320);
@@ -1236,21 +1378,65 @@ function handleGroupTap(gid){
 
 /* リンク操作 */
 function linkStacks(idA, idB, layout){
+  // idA = 新しく加えるカード、idB = リンク先のカード（既存グループのことも）
   const stA=findStack(idA), stB=findStack(idB);
-  if(!stA||!stB) return;
-  const lay = layout || "row";
-  // どちらかが既存グループに属していれば、そのグループへ合流（3枚以上のリンク）
-  let gid = stA.groupId || stB.groupId;
-  if(!gid) gid = "g"+(nextStackId++);
-  // 既存グループのレイアウトがあれば優先（混在を避ける）
-  const existing = Z.battle.find(s=>s.groupId===gid);
-  const useLayout = (existing && existing.groupLayout) ? existing.groupLayout : lay;
-  // 両方のスタック（および既存グループ全員）を同じgidに揃える
-  const targets = new Set([stA, stB]);
-  if(stA.groupId) Z.battle.filter(s=>s.groupId===stA.groupId).forEach(s=>targets.add(s));
-  if(stB.groupId) Z.battle.filter(s=>s.groupId===stB.groupId).forEach(s=>targets.add(s));
-  targets.forEach(st=>{ st.groupId=gid; st.groupLayout=useLayout; });
-  relayoutGroup(gid);
+  if(!stA||!stB || stA===stB) return;
+  const lay = layout || "row"; // right/left/up/down（旧 row=右, col=下 も互換）
+  const cw = parseInt(sizeRange.value,10);
+  const ch = Math.round(cw*1.4);
+  const pad = 4;
+
+  // リンク先(stB)が既にグループに属していれば、そのグループへ合流（自由形 free）
+  if(stB.groupId){
+    const gid = stB.groupId;
+    // stAが別グループだった場合は、その全員を移してくる
+    const movers = stA.groupId ? Z.battle.filter(s=>s.groupId===stA.groupId) : [stA];
+    // stBのグループ内オフセットを基準に、指定方向の隣へstAを置く
+    const bgx = stB.gx||0, bgy = stB.gy||0;
+    let tx = bgx, ty = bgy, stepX = 0, stepY = 0;
+    if(lay==="up")        { ty = bgy - ch - pad; stepY = -(ch+pad); }
+    else if(lay==="down" || lay==="col") { ty = bgy + ch + pad; stepY = (ch+pad); }
+    else if(lay==="left") { tx = bgx - cw - pad; stepX = -(cw+pad); }
+    else                  { tx = bgx + cw + pad; stepX = (cw+pad); } // right / row
+    // 重なり回避：その位置が既に使われていたら同方向にずらす
+    const occupied = (gx,gy)=> Z.battle.some(s=> s.groupId===gid && Math.abs((s.gx||0)-gx)<cw*0.5 && Math.abs((s.gy||0)-gy)<ch*0.5);
+    let guard=0;
+    while(occupied(tx,ty) && guard++<20){ tx+=stepX; ty+=stepY; }
+    if(movers.length===1){
+      stA.gx = tx; stA.gy = ty;
+    } else {
+      // グループごと移す場合は相対形を保ったまま平行移動
+      const a0gx = stA.gx||0, a0gy = stA.gy||0;
+      movers.forEach(m=>{ m.gx = (m.gx||0) - a0gx + tx; m.gy = (m.gy||0) - a0gy + ty; });
+    }
+    movers.forEach(m=>{ m.groupId = gid; m.groupLayout = "free"; m.x = stB.x; m.y = stB.y; });
+    // 負オフセットを正規化（左上を0,0に）
+    normalizeGroup(gid);
+    return;
+  }
+
+  // どちらも未グループ → 新規グループ。stBを基準(0,0)、stAを指定方向の隣に
+  const gid = "g"+(nextStackId++);
+  stB.gx = 0; stB.gy = 0;
+  if(lay==="up")        { stA.gx = 0;        stA.gy = -(ch+pad); }
+  else if(lay==="down" || lay==="col") { stA.gx = 0; stA.gy = ch + pad; }
+  else if(lay==="left") { stA.gx = -(cw+pad); stA.gy = 0; }
+  else                  { stA.gx = cw + pad; stA.gy = 0; } // right / row
+  [stA, stB].forEach(st=>{ st.groupId = gid; st.groupLayout = "free"; st.x = stB.x; st.y = stB.y; });
+  normalizeGroup(gid);
+}
+/* グループの最小オフセットを0,0に揃え、実座標を保つ */
+function normalizeGroup(gid){
+  const members = Z.battle.filter(s=>s.groupId===gid);
+  if(!members.length) return;
+  let minGx=Infinity, minGy=Infinity;
+  members.forEach(m=>{ minGx=Math.min(minGx,m.gx||0); minGy=Math.min(minGy,m.gy||0); });
+  const dx = minGx, dy = minGy;
+  if(dx || dy){
+    members.forEach(m=>{ m.gx=(m.gx||0)-dx; m.gy=(m.gy||0)-dy; });
+    const nx = members[0].x + dx, ny = members[0].y + dy;
+    members.forEach(m=>{ m.x = nx; m.y = ny; });
+  }
 }
 /* グループのメンバーをレイアウトに従って並べ直す（座標を再計算） */
 function relayoutGroup(gid){
@@ -1259,12 +1445,24 @@ function relayoutGroup(gid){
   const cw = parseInt(sizeRange.value,10);
   const ch = Math.round(cw*1.4);
   const pad = 4;
-  const ax = members[0].x, ay = members[0].y;
   const layout = members[0].groupLayout || "row";
-  members.forEach((m,i)=>{
-    if(layout==="col"){ m.x = ax; m.y = ay + i*(ch+pad); }
-    else if(layout==="grid2x2"){ const col=i%2, rw=(i/2)|0; m.x=ax+col*(cw+pad); m.y=ay+rw*(ch+pad); }
-    else { m.x = ax + i*(cw+pad); m.y = ay; } // row（横）
+  // 既に位置が確定しているメンバーが占めるスロット番号を集計
+  const usedSlots = new Set();
+  const slotOf = (gx,gy)=>{
+    if(layout==="col") return Math.round(gy/(ch+pad));
+    if(layout==="grid2x2") return Math.round(gy/(ch+pad))*2 + Math.round(gx/(cw+pad));
+    return Math.round(gx/(cw+pad)); // row
+  };
+  members.forEach(m=>{ if(m.gx!=null && m.gy!=null) usedSlots.add(slotOf(m.gx,m.gy)); });
+  // 未設定メンバーを、空いているスロットに順に割り当て
+  let slot = 0;
+  const nextFreeSlot = ()=>{ while(usedSlots.has(slot)) slot++; usedSlots.add(slot); return slot; };
+  members.forEach(m=>{
+    if(m.gx != null && m.gy != null) return; // L字等で確定済みは触らない
+    const sidx = nextFreeSlot();
+    if(layout==="col"){ m.gx = 0; m.gy = sidx*(ch+pad); }
+    else if(layout==="grid2x2"){ const col=sidx%2, rw=(sidx/2)|0; m.gx=col*(cw+pad); m.gy=rw*(ch+pad); }
+    else { m.gx = sidx*(cw+pad); m.gy = 0; } // row（横）
   });
 }
 function unlinkStack(stackId){
@@ -1273,7 +1471,32 @@ function unlinkStack(stackId){
   Z.battle.filter(s=>s.groupId===gid).forEach(s=>{ s.groupId=null; s.groupLayout=null; });
 }
 function unlinkGroup(gid){
-  Z.battle.filter(s=>s.groupId===gid).forEach(s=>{ s.groupId=null; s.groupLayout=null; });
+  const members = Z.battle.filter(s=>s.groupId===gid);
+  if(members.length===0) return;
+  const cw = parseInt(sizeRange.value,10);
+  const ch = Math.round(cw*1.4);
+  const rect = $("#battleZone") ? $("#battleZone").getBoundingClientRect() : {width:600,height:300};
+  // 解除時：各カードを「グループ内の相対位置を保ちつつ実座標に展開」。
+  // 完全に重なっている場合だけ、少しずつずらして重なりすぎを防ぐ。
+  const anchor = members[0];
+  const baseX = anchor.x - (anchor.gx||0);
+  const baseY = anchor.y - (anchor.gy||0);
+  members.forEach((m,i)=>{
+    let nx = baseX + (m.gx||0);
+    let ny = baseY + (m.gy||0);
+    m.x = Math.max(0, Math.min(rect.width-cw-4, nx));
+    m.y = Math.max(0, Math.min(rect.height-ch-4, ny));
+    m.groupId = null; m.groupLayout = null; m.gx = null; m.gy = null;
+  });
+  // 同座標に完全に重なっているカードがあれば少しずらす
+  for(let i=0;i<members.length;i++){
+    for(let j=i+1;j<members.length;j++){
+      if(Math.abs(members[i].x-members[j].x)<2 && Math.abs(members[i].y-members[j].y)<2){
+        members[j].x = Math.min(rect.width-cw-4, members[j].x + Math.round(cw*0.6));
+        members[j].y = Math.min(rect.height-ch-4, members[j].y + Math.round(ch*0.4));
+      }
+    }
+  }
 }
 
 /* ============ ポインタ操作 ============ */
@@ -1358,8 +1581,41 @@ function finishDrop(e){
   if(!dropEl){ renderAll(); return; }
   const name = dropEl.dataset.drop;
   if(name === "stack"){
-    const stackId = dropEl.dataset.stack;
+    // グループ枠に直接ドロップされた場合は、その枠の代表スタックIDを使う
+    let stackId = dropEl.dataset.stack;
+    if(!stackId && dropEl.dataset.group){
+      const gm = Z.battle.find(s=>s.groupId===dropEl.dataset.group);
+      if(gm) stackId = gm.id;
+    }
+    const srcSt = (ctx.kind === "stacktop") ? findStack(ctx.stackId) : null;
+    const dstSt = findStack(stackId);
+    const sameGroup = srcSt && dstSt && srcSt.groupId && srcSt.groupId === dstSt.groupId &&
+                      srcSt.id !== dstSt.id;
+    // ドロップ先カードの「中心付近」に重ねたら重ねメニュー、
+    // それ以外（辺を接する程度・少しずれた位置）は重ねず、その位置に置く。
+    let onCenter = true;
+    {
+      const cw2 = parseInt(sizeRange.value,10), ch2 = Math.round(cw2*1.4);
+      const sEl = dropEl.classList.contains("stack") ? dropEl :
+                  (dropEl.closest(".stack") || (dropEl.dataset.drop==="stack" ? dropEl : null));
+      if(sEl && sEl.getBoundingClientRect){
+        const r = sEl.getBoundingClientRect();
+        if(r.width){
+          const cx = r.left + r.width/2, cy = r.top + r.height/2;
+          const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+          onCenter = dist < Math.min(cw2, ch2) * 0.75; // 中心付近（広め）で「重ね」
+        }
+      }
+    }
     if(ctx.kind === "stacktop" && ctx.stackId === stackId){
+      moveOwnStack(e);   // 自分自身の上で離した → 位置移動
+    }else if(sameGroup && !onCenter){
+      moveOwnStack(e);   // 同グループ内で中心以外 → 枠内で自由に位置移動
+    }else if(sameGroup && onCenter){
+      openStackChoice(ctx, stackId);  // 同グループで中心に重ね → 重ねメニュー
+      return;
+    }else if(!sameGroup && !onCenter && ctx.kind === "stacktop"){
+      // 非グループのバトルゾーンカード同士：中心以外は重ねず、その位置に単独移動
       moveOwnStack(e);
     }else if(shouldAutoSeal(ctx)){
       applyStackDrop(ctx, stackId, "seal");
@@ -1378,19 +1634,113 @@ function finishDrop(e){
       for(const id of ids){ cards[id].tapped = false; }
       sh.cardIds.unshift(...ids);
     }
+  }else if(name === "deckinsert"){
+    // 山札の山にドロップ → 「上からx枚目に戻す」モーダルを表示
+    const ids = takeFromSource(ctx);
+    if(ids.length){ openDeckInsert(ids); }
+    return;
   }else{
     const ids = takeFromSource(ctx);
     dropTo(ids, name, e);
   }
   renderAll();
 }
+/* 山札の任意の位置（上からx枚目）にカードを戻すモーダル */
+function openDeckInsert(ids){
+  const total = Z.deck.length + ids.length;
+  openModal(`<h2>山札に戻す</h2>
+    <div style="font-size:12px;color:var(--sub)">上から何枚目に戻しますか？（1〜${total}）</div>
+    <div class="btn-grid" style="align-items:center">
+      <span style="font-size:12px">上から</span>
+      <input class="num-input" id="diNum" type="number" min="1" max="${total}" value="1">
+      <span style="font-size:12px">枚目に戻す</span>
+    </div>
+    <div class="btn-grid">
+      <button class="primary" id="diOk">戻す</button>
+      <button id="diTop">一番上へ</button>
+      <button id="diBottom">一番下へ</button>
+      <button id="diCancel">やめる</button>
+    </div>`);
+  const place = (pos)=>{
+    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; cards[id].sideways=false; }
+    const idx = Math.max(0, Math.min(Z.deck.length, pos));
+    Z.deck.splice(idx, 0, ...ids);
+    closeModal(); renderAll();
+  };
+  $("#diOk").onclick = ()=>{
+    let n = parseInt($("#diNum").value,10) || 1;
+    n = Math.max(1, Math.min(total, n));
+    place(n-1); // 上からn枚目 = index n-1
+  };
+  $("#diTop").onclick = ()=> place(0);
+  $("#diBottom").onclick = ()=> place(Z.deck.length);
+  $("#diCancel").onclick = ()=>{
+    // やめる：取り出したカードは山札の一番上に戻す（紛失防止）
+    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; cards[id].sideways=false; }
+    Z.deck.unshift(...ids);
+    closeModal(); renderAll();
+  };
+}
 function moveOwnStack(e){
   const st = findStack(drag.ctx.stackId);
   if(!st) return;
   const rect = $("#battleZone").getBoundingClientRect();
   const cw = parseInt(sizeRange.value,10);
-  st.x = Math.max(0, Math.min(rect.width-cw-4, e.clientX - rect.left - cw/2));
-  st.y = Math.max(0, Math.min(rect.height-cw*1.4-4, e.clientY - rect.top - cw*0.7));
+  const ch = Math.round(cw*1.4);
+  const px = e.clientX - rect.left - cw/2;
+  const py = e.clientY - rect.top - cw*0.7;
+
+  if(st.groupId){
+    // グループ所属：ドロップ位置がグループ枠の近く（内側＋余白）なら位置調整、
+    // 明らかに外れていれば離脱して単独カードになる
+    const gid = st.groupId;
+    const members = Z.battle.filter(s=>s.groupId===gid);
+    // グループ枠の範囲（anchor基準のgx/gy集合）を実座標に直す
+    const anchor = members[0];
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    members.forEach(m=>{
+      const gx=m.gx||0, gy=m.gy||0;
+      minX=Math.min(minX,gx); minY=Math.min(minY,gy);
+      maxX=Math.max(maxX,gx+cw); maxY=Math.max(maxY,gy+ch);
+    });
+    const baseX = anchor.x - (anchor.gx||0);
+    const baseY = anchor.y - (anchor.gy||0);
+    const margin = cw * 2; // この余白以内なら「枠内」とみなす（広めにとって離脱しにくく）
+    const inside = (px >= baseX+minX-margin && px <= baseX+maxX+margin &&
+                    py >= baseY+minY-margin && py <= baseY+maxY+margin);
+    if(inside){
+      // グループ内で位置だけ変更（gx/gyを更新）→ L字などが作れる
+      let ngx = Math.round(px - baseX);
+      let ngy = Math.round(py - baseY);
+      st.gx = ngx; st.gy = ngy;
+      // gx/gyが負になったら、全メンバーのオフセットを平行移動して最小を0に正規化。
+      // 描画は grpEl.left = anchor.x なので、全gxに+dxしたら実座標を-dxして画面位置を保つ。
+      let minGx=Infinity, minGy=Infinity;
+      members.forEach(m=>{ minGx=Math.min(minGx, m.gx||0); minGy=Math.min(minGy, m.gy||0); });
+      const dx = minGx < 0 ? -minGx : 0;
+      const dy = minGy < 0 ? -minGy : 0;
+      if(dx || dy){
+        members.forEach(m=>{ m.gx = (m.gx||0) + dx; m.gy = (m.gy||0) + dy; });
+      }
+      // グループは「1点(anchorの実座標)＋各自のgx/gy」で管理。実座標を全員anchor基準に揃え、
+      // 正規化でずらした分(dx,dy)だけ実座標を戻して画面位置を不変に保つ。
+      const newX = anchor.x - dx, newY = anchor.y - dy;
+      members.forEach(m=>{ m.x = newX; m.y = newY; });
+      return;
+    }
+    // 枠外 → 離脱して単独に
+    st.groupId = null; st.groupLayout = null;
+    st.gx = null; st.gy = null;
+    st.x = Math.max(0, Math.min(rect.width-cw-4, px));
+    st.y = Math.max(0, Math.min(rect.height-ch-4, py));
+    const rest = Z.battle.filter(s=>s.groupId===gid);
+    if(rest.length === 1){ rest[0].groupId = null; rest[0].groupLayout = null; rest[0].gx=null; rest[0].gy=null; }
+    Z.battle = Z.battle.filter(s=>s!==st); Z.battle.push(st);
+    return;
+  }
+  // 非グループ：従来どおり単独移動
+  st.x = Math.max(0, Math.min(rect.width-cw-4, px));
+  st.y = Math.max(0, Math.min(rect.height-ch-4, py));
   Z.battle = Z.battle.filter(s=>s!==st); Z.battle.push(st);
 }
 function cleanupDrag(){
@@ -1425,9 +1775,50 @@ function onSingleTap(ctx){
   if(ctx.kind === "deckpile"){ openDeckMenu(); return; }
   if(ctx.kind === "grpile"){ openGRMenu(); return; }
   if(ctx.kind === "hyperpile"){ openHyperMenu(); return; }
+  // シールドのカードは1回タップでメニュー（タップ／構成する）
+  if(ctx.kind === "shieldstack"){ openShieldTapMenu(ctx.shieldId); return; }
   // それ以外のカードは1回クリックでタップ／アンタップ
   const c = cards[ctx.cardId];
   if(c){ c.tapped = !c.tapped; renderAll(); }
+}
+/* シールドを1回タップしたときのメニュー */
+function openShieldTapMenu(shieldId){
+  const sh = findShield(shieldId);
+  if(!sh){ return; }
+  const topId = sh.cardIds[0];
+  const top = cards[topId];
+  openModal(`<h2>シールド</h2>
+    <div style="font-size:11px;color:var(--sub)">${sh.cardIds.length}枚で構成</div>
+    <div class="btn-grid">
+      <button id="shTap">${top && top.tapped ? "アンタップ" : "タップ"}</button>
+      <button id="shCompose">構成する</button>
+      <button id="shCloseMenu">閉じる</button>
+    </div>`);
+  $("#shTap").onclick = ()=>{
+    // シールドの一番上のカードをタップ/アンタップ
+    if(top){ top.tapped = !top.tapped; }
+    renderAll(); closeModal();
+  };
+  $("#shCompose").onclick = ()=> openShieldCompose(shieldId);
+  $("#shCloseMenu").onclick = closeModal;
+}
+/* 「構成する」ウィンドウ：シールド内カードをオブジェクトとして表示・編集 */
+function openShieldCompose(shieldId){
+  const sh = findShield(shieldId);
+  if(!sh){ closeModal(); return; }
+  openModal(`<h2>シールドを構成</h2>
+    <div style="font-size:11px;color:var(--sub)">左が一番上です。カードをタップすると、移動・表裏・タップを編集できます（バトルゾーンと同じ操作）。</div>
+    <div class="modal-cards" id="composeCards"></div>
+    <div class="btn-grid"><button id="composeClose">閉じる</button></div>`);
+  const grid = $("#composeCards");
+  // 裏向きは裏のまま、表向きは表向きで表示（staticCardElがfaceUpを反映）
+  for(const id of sh.cardIds){
+    const el = staticCardEl(id);
+    el.style.cursor = "pointer";
+    el.onclick = ()=> openShieldCardActions(shieldId, id, "compose");
+    grid.appendChild(el);
+  }
+  $("#composeClose").onclick = closeModal;
 }
 function onDoubleTap(ctx){
   if(ctx.kind === "deckpile"){ draw(); return; }
@@ -1572,16 +1963,21 @@ function openShieldModal(shieldId){
   }
   $("#shClose").onclick = closeModal;
 }
-function openShieldCardActions(shieldId, id){
+function openShieldCardActions(shieldId, id, backTo){
   const c = cards[id];
+  const back = backTo === "compose" ? (()=>openShieldCompose(shieldId)) : (()=>openShieldModal(shieldId));
+  const sh = findShield(shieldId);
+  const isTop = sh && sh.cardIds[0] === id;
   openModal(`<h2>${c.faceUp ? escapeHtml(c.name) : "裏向きのカード"}</h2>
-    <div style="font-size:11px;color:var(--sub)">シールドの中</div>
+    <div style="font-size:11px;color:var(--sub)">シールドの中${isTop ? "（一番上）" : ""}</div>
     <div class="cardtext">${c.faceUp
       ? (c.text ? escapeHtml(c.text) : "（カードテキスト未登録）")
       : "表は見えていません。"}</div>
     <div class="btn-grid">
       ${c.faceUp ? "" : '<button id="sPeek">こっそり見る</button>'}
       <button id="sFlip">表/裏</button>
+      <button id="sTap">${c.tapped ? "アンタップ" : "タップ"}</button>
+      ${isTop ? "" : '<button id="sToTop">一番上にする</button>'}
       <button data-go="hand">手札へ</button>
       <button data-go="grave">墓地へ</button>
       <button data-go="mana">マナへ</button>
@@ -1593,8 +1989,17 @@ function openShieldCardActions(shieldId, id){
     $("#modal h2").textContent = c.name;
     $("#modal .cardtext").textContent = c.text || "（カードテキスト未登録）";
   };
-  $("#sFlip").onclick = ()=>{ c.faceUp = !c.faceUp; renderAll(); openShieldModal(shieldId); };
-  $("#sBack").onclick = ()=> openShieldModal(shieldId);
+  $("#sFlip").onclick = ()=>{ c.faceUp = !c.faceUp; renderAll(); back(); };
+  $("#sTap").onclick = ()=>{ c.tapped = !c.tapped; renderAll(); back(); };
+  const toTop = $("#sToTop");
+  if(toTop) toTop.onclick = ()=>{
+    if(sh){
+      const i = sh.cardIds.indexOf(id);
+      if(i > 0){ sh.cardIds.splice(i,1); sh.cardIds.unshift(id); }
+    }
+    renderAll(); back();
+  };
+  $("#sBack").onclick = ()=> back();
   modal.querySelectorAll("[data-go]").forEach(b=>{
     b.onclick = ()=>{
       const ids = takeFromSource({kind:"shieldcard", shieldId, cardId:id});
@@ -1606,31 +2011,49 @@ function openShieldCardActions(shieldId, id){
       }
       renderAll();
       const still = findShield(shieldId);
-      if(still) openShieldModal(shieldId); else closeModal();
+      if(still) back(); else closeModal();
     };
   });
 }
 function openStackChoice(ctx, stackId){
   const st = findStack(stackId);
   const topName = st ? cards[st.cardIds[0]].name : "";
-  const srcStackId = ctx.stackId || null;
+  let srcStackId = ctx.stackId || null;
+  // ソースがバトルゾーンのスタックでない場合（手札・マナ・墓地等）は、
+  // リンク確定時にそのカードを取り出してバトルゾーンへ新スタック化してから繋ぐ
+  const ensureSrcStack = ()=>{
+    if(srcStackId && findStack(srcStackId)) return srcStackId;
+    const ids = takeFromSource(ctx);
+    if(!ids.length) return null;
+    for(const id of ids){ cards[id].faceUp = true; cards[id].tapped = false; }
+    const dst = findStack(stackId);
+    const nx = dst ? dst.x : 12, ny = dst ? dst.y : 12;
+    addStack(ids, nx, ny);
+    return Z.battle[Z.battle.length-1].id;
+  };
   openModal(`<h2>どう重ねますか？</h2>
     <div style="font-size:12px;color:var(--sub)">重ねる先：${escapeHtml(topName)}</div>
     <div class="btn-grid">
       <button class="primary" id="cTop">上に重ねる（進化など）</button>
       <button id="cBottom">一番下に置く</button>
       <button id="cSeal">封印にする（裏向き）</button>
-      <button id="cLink">リンクさせる（横）</button>
-      <button id="cLinkV">リンクさせる（縦）</button>
+      <button id="cLinkR">リンク（右）</button>
+      <button id="cLinkL">リンク（左）</button>
+      <button id="cLinkU">リンク（上）</button>
+      <button id="cLinkD">リンク（下）</button>
       <button id="cCancel">やめる</button>
     </div>`);
   $("#cTop").onclick    = ()=>{ applyStackDrop(ctx, stackId, "top"); closeModal(); };
   $("#cBottom").onclick = ()=>{ applyStackDrop(ctx, stackId, "bottom"); closeModal(); };
   $("#cSeal").onclick   = ()=>{ applyStackDrop(ctx, stackId, "seal"); closeModal(); };
-  $("#cLink").onclick   = ()=>{
-    if(srcStackId){ linkStacks(srcStackId, stackId, "row"); } closeModal(); renderAll(); };
-  $("#cLinkV").onclick  = ()=>{
-    if(srcStackId){ linkStacks(srcStackId, stackId, "col"); } closeModal(); renderAll(); };
+  $("#cLinkR").onclick = ()=>{
+    const sid = ensureSrcStack(); if(sid){ linkStacks(sid, stackId, "right"); } closeModal(); renderAll(); };
+  $("#cLinkL").onclick = ()=>{
+    const sid = ensureSrcStack(); if(sid){ linkStacks(sid, stackId, "left"); } closeModal(); renderAll(); };
+  $("#cLinkU").onclick = ()=>{
+    const sid = ensureSrcStack(); if(sid){ linkStacks(sid, stackId, "up"); } closeModal(); renderAll(); };
+  $("#cLinkD").onclick = ()=>{
+    const sid = ensureSrcStack(); if(sid){ linkStacks(sid, stackId, "down"); } closeModal(); renderAll(); };
   $("#cCancel").onclick = ()=>{ closeModal(); renderAll(); };
 }
 function openDeckMenu(){
@@ -1638,23 +2061,49 @@ function openDeckMenu(){
     <div class="btn-grid">
       <button id="dDraw">1枚ドロー</button>
       <button id="dMana">マナ加速</button>
+      <button id="dGrave">墓地に置く</button>
       <button id="dShuffle">シャッフル</button>
       <button id="dViewAll">すべて見る</button>
     </div>
+    <div class="btn-grid">
+      <button id="dPeek">上から見ていく</button>
+    </div>
+    <div class="btn-grid" style="align-items:center">
+      <span style="font-size:12px">下から</span>
+      <input class="num-input" id="dNumB" type="number" min="1" value="3">
+      <span style="font-size:12px">枚</span>
+      <button id="dViewBottom">見る</button>
+    </div>
     <div class="btn-grid" style="align-items:center">
       <span style="font-size:12px">上から</span>
-      <input class="num-input" id="dNum" type="number" min="1" value="3">
-      <span style="font-size:12px">枚</span>
-      <button id="dViewTop">見る</button>
+      <input class="num-input" id="dNumS" type="number" min="1" value="1">
+      <span style="font-size:12px">枚目を</span>
+      <button id="dSideways">横向き(位置をずらす)／戻す</button>
     </div>
+    <div id="dSideStatus" style="font-size:11px;color:var(--accent2);min-height:14px"></div>
     <div class="btn-grid"><button id="dClose">閉じる</button></div>`);
   $("#dDraw").onclick = ()=>{ draw(); closeModal(); };
   $("#dMana").onclick = ()=>{ manaCharge(); closeModal(); };
+  $("#dGrave").onclick = ()=>{ deckToGrave(); closeModal(); };
   $("#dShuffle").onclick = ()=>{ shuffle(Z.deck); renderAll(); closeModal(); };
-  $("#dViewAll").onclick = ()=> openDeckViewer(Z.deck.length);
-  $("#dViewTop").onclick = ()=>{
-    const n = parseInt($("#dNum").value,10) || 1;
-    openDeckViewer(Math.min(n, Z.deck.length));
+  $("#dViewAll").onclick = ()=> openDeckViewer(Z.deck.length, false);
+  $("#dPeek").onclick = ()=> openDeckPeek();
+  $("#dViewBottom").onclick = ()=>{
+    const n = parseInt($("#dNumB").value,10) || 1;
+    openDeckViewer(Math.min(n, Z.deck.length), true);
+  };
+  $("#dSideways").onclick = ()=>{
+    const n = parseInt($("#dNumS").value,10) || 1;
+    if(n < 1 || n > Z.deck.length){ $("#dSideStatus").textContent = "その枚数目はありません。"; return; }
+    const id = Z.deck[n-1]; // 上からn枚目（0始まりでn-1）
+    if(cards[id]){
+      const willSide = !cards[id].sideways;
+      // 山札内のsidewaysを一旦すべて解除し、指定したx枚目だけを横向きにする
+      Z.deck.forEach(cid=>{ if(cards[cid]) cards[cid].sideways = false; });
+      cards[id].sideways = willSide;
+      $("#dSideStatus").textContent = `上から${n}枚目を${willSide ? "ずらしました。" : "戻しました。"}`;
+      renderAll();
+    }
   };
   $("#dClose").onclick = closeModal;
 }
@@ -1694,10 +2143,78 @@ function openHyperCardActions(id){
   $("#hyBattle").onclick = ()=>{ hyperToBattle(id); closeModal(); };
   $("#hyBack").onclick = openHyperMenu;
 }
-function openDeckViewer(n){
-  const items = Z.deck.slice(0, n);
-  let html = `<h2>山札の上から ${n} 枚</h2>
-    <div style="font-size:11px;color:var(--sub)">1 が一番上です。移動するとその場で山札から抜けます。</div>
+/* 山札を上から1枚ずつリスト表示していく。「次を見る」の位置は固定。 */
+function openDeckPeek(){
+  let shown = 0; // 何枚目まで表示したか（1始まり）
+  function render(){
+    const seen = Z.deck.slice(0, shown);
+    let listHtml = "";
+    seen.forEach((id, idx)=>{
+      listHtml += `<div class="deck-item" data-card="${id}">
+        <span class="pos">${idx+1}</span>
+        <span class="nm">${escapeHtml(cards[id].name)}</span>
+        <button class="small" data-act="hand">手札</button>
+        <button class="small" data-act="mana">マナ</button>
+        <button class="small" data-act="grave">墓地</button>
+        <button class="small" data-act="deckbottom">下へ</button>
+      </div>`;
+    });
+    if(shown === 0) listHtml = '<div style="color:var(--sub);font-size:12px;padding:8px 0">「次を見る」で1枚目から順に表示します。</div>';
+    openModal(`<h2>山札を上から見る</h2>
+      <div style="font-size:11px;color:var(--sub)">${shown===0 ? "" : `${shown}枚目まで表示中（残り${Z.deck.length-shown}枚）。各カードは移動するとその場で山札から抜けます。`}</div>
+      <div class="deck-list" style="height:160px;overflow-y:auto">${listHtml}</div>
+      <div class="btn-grid">
+        <button class="primary" id="pkNext">次を見る</button>
+      </div>
+      <div class="btn-grid">
+        <button id="pkShufTop">シャッフルして山札上</button>
+        <button id="pkShufBottom">シャッフルして山札下</button>
+      </div>
+      <div class="btn-grid">
+        <button id="pkRestore">元に戻す</button>
+        <button id="pkGrave">全て墓地に置く</button>
+        <button id="pkClose">閉じる</button>
+      </div>`);
+    // 各カードの移動ボタン
+    modal.querySelectorAll(".deck-item button").forEach(b=>{
+      b.onclick = ()=>{
+        const row = b.closest(".deck-item");
+        const id = row.dataset.card;
+        const i = Z.deck.indexOf(id);
+        if(i>=0){
+          Z.deck.splice(i,1);
+          if(i < shown) shown--; // 表示済みのカードが抜けたらカウントを詰める
+          dropTo([id], b.dataset.act, {clientX:0,clientY:0});
+          render();
+        }
+      };
+    });
+    const nextBtn = $("#pkNext");
+    if(shown >= Z.deck.length){ nextBtn.disabled = true; nextBtn.textContent = "これ以上ありません"; }
+    nextBtn.onclick = ()=>{ if(shown < Z.deck.length){ shown++; render(); } };
+    // 見た中で山札に残っているカード（= 先頭shown枚）への操作
+    $("#pkShufTop").onclick = ()=>{
+      const s2 = Z.deck.slice(0, shown); Z.deck = Z.deck.slice(shown);
+      shuffle(s2); Z.deck.unshift(...s2); closeModal(); renderAll();
+    };
+    $("#pkShufBottom").onclick = ()=>{
+      const s2 = Z.deck.slice(0, shown); Z.deck = Z.deck.slice(shown);
+      shuffle(s2); Z.deck.push(...s2); closeModal(); renderAll();
+    };
+    $("#pkRestore").onclick = ()=>{ closeModal(); renderAll(); };
+    $("#pkGrave").onclick = ()=>{
+      const s2 = Z.deck.slice(0, shown); Z.deck = Z.deck.slice(shown);
+      for(const id of s2){ cards[id].faceUp = true; cards[id].tapped = false; cards[id].sideways = false; }
+      Z.grave.push(...s2); closeModal(); renderAll();
+    };
+    $("#pkClose").onclick = ()=>{ closeModal(); renderAll(); };
+  }
+  render();
+}
+function openDeckViewer(n, fromBottom){
+  const items = fromBottom ? Z.deck.slice(Math.max(0, Z.deck.length - n)).slice().reverse() : Z.deck.slice(0, n);
+  let html = `<h2>山札の${fromBottom ? "下" : "上"}から ${n} 枚</h2>
+    <div style="font-size:11px;color:var(--sub)">1 が一番${fromBottom ? "下" : "上"}です。移動するとその場で山札から抜けます。</div>
     <div class="deck-list">`;
   items.forEach((id, i)=>{
     html += `<div class="deck-item" data-card="${id}">
@@ -1740,6 +2257,7 @@ $("#btnSetup2").onclick = ()=>{
 $("#btnShuffle").onclick = ()=>{ shuffle(Z.deck); renderAll(); };
 $("#btnDraw").onclick = draw;
 $("#btnMana").onclick = manaCharge;
+$("#btnToGrave").onclick = deckToGrave;
 $("#btnGR").onclick = grSummon;
 $("#btnViewDeck").onclick = openDeckMenu;
 
@@ -2512,10 +3030,14 @@ function rebuildAllTables(){
   buildStartTable();
   updateMainCount();
   updateCivCount();
+  updateZoneCount("#taGR", false, "grCount", "grCivCount");
+  updateZoneCount("#taHyper", true, "hyperCount", "hyperCivCount");
 }
 /* textareaの値が変わったとき（テーブル操作以外の経路）も再構築できるよう公開 */
 function onTaChange(taId){
   if(taId==="#taMain"){ updateMainCount(); updateCivCount(); }
+  else if(taId==="#taGR"){ updateZoneCount("#taGR", false, "grCount", "grCivCount"); }
+  else if(taId==="#taHyper"){ updateZoneCount("#taHyper", true, "hyperCount", "hyperCivCount"); }
 }
 
 /* ---------- メインデッキ枚数・文明カウント ---------- */
@@ -2535,6 +3057,21 @@ function updateCivCount(){
   });
   el.textContent = CIVS.filter(c=>totals[c]>0).map(c=>c+totals[c]).join(" ");
 }
+/* GR・超次元の枚数＋文明カウント（dual=超次元は表面の文明で集計） */
+function updateZoneCount(taId, dual, cntElId, civElId){
+  const cntEl=document.getElementById(cntElId), civEl=document.getElementById(civElId);
+  const rows=taToRows(taId, dual);
+  let total=0; const totals={};
+  CIVS.forEach(c=>totals[c]=0);
+  rows.forEach(r=>{
+    const cnt=r.count||1; total+=cnt;
+    const civs=r.civs||[];
+    civs.forEach(c=>{ if(totals[c]!=null) totals[c]+=cnt; });
+    if(!civs.length) totals["無色"]+=cnt;
+  });
+  if(cntEl) cntEl.textContent=`現在 ${total} 枚`;
+  if(civEl) civEl.textContent=CIVS.filter(c=>totals[c]>0).map(c=>c+totals[c]).join(" ");
+}
 
 /* ---------- ゲーム開始時に存在するカード (startZone) ---------- */
 const START_PRESETS = [
@@ -2552,10 +3089,10 @@ const START_PRESETS = [
   // ③零龍
   [
     {count:1,name:"零無",civs:["闇"],text:"",name2:"零龍",civs2:["闇"],text2:""},
-    {count:1,name:"墓地の儀",civs:["闇"],text:"",name2:"右上",civs2:[],text2:""},
-    {count:1,name:"復活の儀",civs:["闇"],text:"",name2:"左下",civs2:[],text2:""},
-    {count:1,name:"手札の儀",civs:["闇"],text:"",name2:"左上",civs2:[],text2:""},
-    {count:1,name:"破壊の儀",civs:["闇"],text:"",name2:"右下",civs2:[],text2:""},
+    {count:1,name:"墓地の儀",civs:["闇"],text:"",name2:"右上",civs2:["闇"],text2:""},
+    {count:1,name:"復活の儀",civs:["闇"],text:"",name2:"左下",civs2:["闇"],text2:""},
+    {count:1,name:"手札の儀",civs:["闇"],text:"",name2:"左上",civs2:["闇"],text2:""},
+    {count:1,name:"破壊の儀",civs:["闇"],text:"",name2:"右下",civs2:["闇"],text2:""},
   ],
 ];
 let currentStartPreset = 0;
