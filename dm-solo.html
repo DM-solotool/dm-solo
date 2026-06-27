@@ -505,6 +505,24 @@
     ※ 操作方法：<b>1回タップ</b>＝タップ・アンタップ／<b>2回タップ</b>＝裏返す／<b>押しながらスライド</b>＝移動<br>
     ※ バトルゾーンのカードに別のカードを重ねると「上に重ねる／一番下に置く／封印／リンクさせる」を選べます。
   </p>
+
+  <div class="contact-box" style="margin-top:18px;border-top:1px solid var(--line);padding-top:12px">
+    <label style="display:block;font-weight:700;margin-bottom:4px">お問い合わせ</label>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:6px">
+      ご意見・不具合のご報告などをお送りいただけます。個人情報（お名前・メールアドレス等）は入力しないでください。返信はできません。
+    </div>
+    <textarea id="contactBody" rows="3" placeholder="お問い合わせ内容をご記入ください"
+      style="width:100%;box-sizing:border-box;font-size:13px;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--card-bg,#0d1626);color:var(--txt);resize:vertical"></textarea>
+    <div style="margin-top:6px">
+      <button id="contactSend" class="small">送信</button>
+      <span id="contactStatus" style="font-size:12px;color:var(--accent2);margin-left:8px"></span>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;text-align:center;font-size:12px;color:var(--sub)">
+    <span id="termsLink" style="color:var(--accent2);text-decoration:underline;cursor:pointer">利用規約</span>
+    <div style="margin-top:6px">© 2026 DM solo All rights reserved.</div>
+  </div>
 </div>
 
 
@@ -1932,6 +1950,29 @@ function openModal(html){
   overlay.classList.add("show");
 }
 function closeModal(){ overlay.classList.remove("show"); modal.innerHTML=""; }
+
+/* ===== 利用規約モーダル ===== */
+function openTerms(){
+  const html = `
+    <h2>利用規約</h2>
+    <div style="font-size:12px;line-height:1.7;max-height:60vh;overflow-y:auto;text-align:left">
+      <p style="color:var(--sub)">制定日：2026年6月27日</p>
+      <p><b>第1条（適用）</b><br>本規約は、DM solo（以下「当サービス」）の利用に関する条件を定めるものです。ユーザーは、当サービスを利用することにより、本規約に同意したものとみなされます。</p>
+      <p><b>第2条（サービスの内容）</b><br>当サービスは、トレーディングカードゲームのデッキ作成・編集・一人回し（プレイ支援）機能を提供するWebサービスです。当サービスは非公式のファンサービスであり、株式会社タカラトミーをはじめとする各権利者とは一切関係ありません。</p>
+      <p><b>第3条（利用環境・データの取り扱い）</b><br>当サービスはユーザーのブラウザ上で動作します。ユーザーが作成したデッキ等のデータは、ユーザーご自身の端末（ブラウザ）内に保存され、運営者がこれを収集・保管することはありません。端末の変更・データの消去等により保存内容が失われる場合がありますが、運営者はこれについて責任を負いません。</p>
+      <p><b>第4条（一人回し機能の利用）</b><br>一人回し機能は、ユーザーが自身のデッキの動作確認や調整を一人で行うことを目的とした補助機能です。公式の大会・対戦等での使用可否は各主催者の規定に従ってください。</p>
+      <p><b>第5条（禁止事項）</b><br>ユーザーは、以下の行為を行ってはなりません。<br>・法令または公序良俗に反する行為<br>・当サービスの運営を妨げる行為<br>・他のユーザーまたは第三者に不利益を与える行為<br>・不正アクセス、その他サーバーに過度な負荷をかける行為<br>・当サービスを複製・改変し、運営者に無断で再配布または商用利用する行為</p>
+      <p><b>第6条（知的財産権）</b><br>デュエル・マスターズをはじめとする各カードゲームに関する著作権・商標権等の知的財産権は、株式会社タカラトミーおよび各関連権利者に帰属します。当サービスは、これらの権利を侵害する意図はありません。権利者からの申し出があった場合、運営者は速やかに該当内容の修正・削除等の対応を行います。</p>
+      <p><b>第7条（免責事項）</b><br>・当サービスは予告なくその内容の変更・中断・終了を行う場合があります。<br>・当サービスは、その完全性・正確性・有用性等についていかなる保証も行いません。<br>・当サービスの利用または利用不能により生じたいかなる損害についても、運営者は一切の責任を負いません。</p>
+      <p><b>第8条（お問い合わせ）</b><br>お問い合わせは当サービス内のフォームよりお願いいたします。個人情報の入力はご遠慮ください。内容によっては回答できない場合があります。</p>
+      <p><b>第9条（規約の変更）</b><br>本規約の内容は、必要に応じて変更することがあります。変更後の規約は、当サービス上に掲載した時点で効力を生じるものとします。</p>
+      <p><b>第10条（準拠法・管轄）</b><br>本規約の解釈および適用は日本法に準拠するものとします。当サービスに関して紛争が生じた場合には、運営者の所在地を管轄する裁判所を第一審の専属的合意管轄裁判所とします。</p>
+      <p><b>第11条（分離可能性）</b><br>本規約のいずれかの条項が無効または執行不能と判断された場合でも、その他の条項は引き続き有効に存続するものとします。</p>
+    </div>
+    <div class="btn-grid"><button id="termsClose">閉じる</button></div>`;
+  openModal(html);
+  $("#termsClose").onclick = closeModal;
+}
 overlay.addEventListener("pointerdown", e=>{ if(e.target===overlay) closeModal(); });
 
 function zoneNameJa(ctx){
@@ -2407,6 +2448,51 @@ const SAMPLE_HYPER =
 1 金河刃ニケ [光]||>銀河美刃ミケランジェロ [光]||>最終銀河アヴァンギャルド [光]
 1 轟く覚醒レッドゾーンバスター [光]||>蒼き覚醒ドギラゴンX [闇/水]`;
 
+/* ===== 利用規約リンク ===== */
+const _termsLink = document.getElementById("termsLink");
+if(_termsLink) _termsLink.onclick = ()=>{ openTerms(); };
+
+/* ===== お問い合わせ送信 =====
+   送信先は Formspree 等のフォーム固有URLを設定する。
+   ここに運営者のメールアドレスは書かない（Formspree側で受信先を管理するため、
+   ソースや開発者ツールからメールアドレスは見えない）。
+   例: "https://formspree.io/f/xxxxxxxx" を FORM_ENDPOINT に設定する。 */
+const FORM_ENDPOINT = "https://formspree.io/f/mlgybzzg"; // Formspreeのフォームエンドポイント
+const _contactSend = document.getElementById("contactSend");
+if(_contactSend) _contactSend.onclick = async ()=>{
+  const ta = document.getElementById("contactBody");
+  const status = document.getElementById("contactStatus");
+  const body = (ta.value||"").trim();
+  if(!body){ status.textContent = "内容を入力してください。"; return; }
+  if(!FORM_ENDPOINT){
+    // 送信先未設定時は、内容を消すだけ（後でURLを設定すれば実送信される）
+    ta.value = "";
+    _contactSend.textContent = "送信完了";
+    status.textContent = "";
+    return;
+  }
+  _contactSend.disabled = true;
+  status.textContent = "送信中…";
+  try{
+    const res = await fetch(FORM_ENDPOINT, {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ message: body })
+    });
+    if(res.ok){
+      ta.value = "";                  // 送信後は内容を消す
+      _contactSend.textContent = "送信完了";
+      status.textContent = "";
+    }else{
+      status.textContent = "送信に失敗しました。時間をおいてお試しください。";
+      _contactSend.disabled = false;
+    }
+  }catch(_){
+    status.textContent = "送信に失敗しました。通信環境をご確認ください。";
+    _contactSend.disabled = false;
+  }
+};
+
 $("#btnSample").onclick = ()=>{
   $("#taMain").value = SAMPLE_MAIN;
   $("#taGR").value = SAMPLE_GR;
@@ -2428,6 +2514,7 @@ $("#btnStart").onclick = ()=>{
       text: r.text||"", count: r.count||1
     }));
   learnCivDict([...deckList.main, ...deckList.gr]);
+  closeModal();                       // 開いているモーダル（利用規約等）があれば閉じる
   $("#setup").classList.remove("show");
   initialSetup();
 };
