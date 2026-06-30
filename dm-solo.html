@@ -134,8 +134,9 @@
 
   /* バトルゾーンのスタック */
   .stack{position:absolute; z-index:1;}
-  .stack-top{position:relative;}
+  .stack-top{position:relative; width:var(--cw); height:var(--ch);}
   .stack-unders{display:flex; gap:2px; margin-top:3px;}
+  .stack-unders.stack-unders-v{flex-direction:column;}
   .stack-unders .card{
     width:calc(var(--cw) * .78);
     height:calc(var(--ch) * .78);
@@ -165,6 +166,13 @@
     overflow-y:auto;
   }
   .shieldstack{position:relative; flex:none;}
+  .shield-ghost{ opacity:.95; pointer-events:none; }
+  .shieldstack.shield-highlight{ filter:drop-shadow(0 0 4px var(--accent2)); }
+  .shield-justplaced::after{
+    content:""; position:absolute; inset:-3px;
+    border:2px dashed var(--accent2); border-radius:8px;
+    pointer-events:none; z-index:50;
+  }
   .shieldstack .scount{
     position:absolute; right:-7px; top:-7px;
     background:var(--accent2); color:#04121f; font-size:9px; font-weight:700;
@@ -185,10 +193,16 @@
   #graveZone{background:rgba(80,40,60,.10);}
 
   /* ===== 手札 ===== */
+  #handZone .hand-tools{
+    position:absolute; top:14px; right:6px;
+    display:flex; flex-direction:column; gap:5px;
+    z-index:5;
+  }
+  #handZone .hand-tools button.small{ padding:3px 7px; font-size:11px; white-space:nowrap; }
   #handZone{
     position:relative;
     min-height:calc(var(--ch) + 22px);
-    padding:14px 8px 8px;
+    padding:14px 64px 8px 8px;
     display:flex; flex-wrap:wrap; gap:5px; align-content:flex-start;
     overflow-y:auto;
     flex:1 1 auto;
@@ -230,7 +244,7 @@
   }
   .btn-grid{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
   .modal-cards{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
-  .modal-cards .card{width:64px; height:90px; cursor:pointer;}
+  .modal-cards .card{width:64px; height:90px; cursor:pointer; touch-action:none;}
   .modal-cards .card.faceup .cname{font-size:9px;}
   .card.hasart{background-size:cover !important; background-position:center;}
   .card.hasart .cname{
@@ -243,10 +257,11 @@
   }
   .deck-list{margin-top:8px;}
   .deck-item{
-    display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+    display:flex; align-items:center; gap:3px; flex-wrap:nowrap;
     padding:6px 0; border-bottom:1px solid rgba(255,255,255,.07);
   }
-  .deck-item .nm{flex:1; font-size:12px; min-width:80px; overflow:hidden; text-overflow:ellipsis;}
+  .deck-item button.small{ padding:2px 5px; font-size:11px; flex:none; }
+  .deck-item .nm{flex:1; font-size:12px; min-width:46px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .deck-item .pos{font-size:10px; color:var(--sub); width:20px; flex:none;}
   .num-input{
     width:64px; font:inherit; font-size:13px;
@@ -347,6 +362,18 @@
   .seal-link{ transform:rotate(90deg) !important; pointer-events:auto !important; z-index:6; }
   .seal-link.tapped{ transform:rotate(180deg) !important; }
   /* リンク解除タブ */
+  .stack-movetab{
+    position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+    background:#4a90d9; color:#fff; font-size:10px; font-weight:700;
+    padding:1px 8px; border-radius:6px 6px 0 0; cursor:grab; white-space:nowrap;
+    z-index:55; touch-action:none;
+  }
+  .stack-seq{
+    position:absolute; top:-6px; right:-6px; z-index:60;
+    min-width:15px; height:15px; padding:0 3px; box-sizing:border-box;
+    background:var(--accent2); color:#04121f; font-size:10px; font-weight:700;
+    border-radius:8px; text-align:center; line-height:15px; pointer-events:none;
+  }
   .link-tabs{
     position:absolute; top:-17px; left:0; display:flex; gap:3px;
     z-index:10; pointer-events:none;
@@ -359,6 +386,7 @@
   .link-tab.tab-move{ background:#7fd1ff; cursor:grab; }
   .link-tab.tab-tap{ background:#ffd23f; }
   .link-tab.tab-unlink{ background:#ff9a8a; }
+  .link-tab.tab-view{background:#34c759;}
   .link-tab:active{ filter:brightness(.9); }
   .card.multi-sel{ outline:3px solid #ffd23f; outline-offset:1px; box-shadow:0 0 8px #ffd23f; }
   #multiBar{
@@ -381,7 +409,8 @@
   <button id="btnDraw">ドロー</button>
   <button id="btnMana">マナ加速</button>
   <button id="btnToGrave">墓地</button>
-  <button id="btnViewDeck">山札を見る</button>
+  <button id="btnToShield">シールド化</button>
+  <button id="btnViewDeck">上から見ていく</button>
   <button id="btnMultiSelect">複数枚選ぶ</button>
   <button id="btnDeckEdit" class="small">デッキ変更</button>
   <span class="size-ctl">大きさ<input type="range" id="sizeRange" min="22" max="64" value="43"></span>
@@ -501,8 +530,8 @@
     <b>保存したデッキ</b>（この端末のブラウザに保存されます）
     <div id="savedList" style="margin-top:6px"></div>
   </div>
-  <p class="note" style="margin-top:14px">
-    ※ 操作方法：<b>1回タップ</b>＝タップ・アンタップ／<b>2回タップ</b>＝裏返す／<b>押しながらスライド</b>＝移動<br>
+  <p class="note" style="margin-top:14px;background:rgba(255,235,130,.16);border:1px solid rgba(255,225,90,.4);border-radius:8px;padding:10px 12px">
+    ※ 操作方法：<b>1回タップ</b>＝タップ・アンタップ／<b>2回タップ</b>＝裏返す／<b>押しながらスライド</b>＝移動／<b>表向きのカードを長押し</b>＝カード名でネット検索<br>
     ※ バトルゾーンのカードに別のカードを重ねると「上に重ねる／一番下に置く／封印／リンクさせる」を選べます。
   </p>
 
@@ -538,6 +567,7 @@ function newZones(){
 }
 let nextStackId = 1;
 let nextShieldId = 1;
+let _justPlacedShield = null; // 直近に裏向きで置かれたシールドID（点線表示用）
 let deckList = {main:[], gr:[], hyper:[]};
 let deckArt = {main:[], gr:[], hyper:[]};
 
@@ -725,6 +755,14 @@ function manaCharge(){
   Z.mana.push(id);
   renderAll();
 }
+function deckToShield(){
+  if(!Z.deck.length) return;
+  const id = Z.deck.shift();
+  cards[id].faceUp = false; cards[id].tapped = false; cards[id].sideways = false; // 裏向き
+  Z.shield.push({id:"sh"+(nextShieldId++), cardIds:[id]});
+  _justPlacedShield = Z.shield[Z.shield.length-1].id; // 点線ハイライト
+  renderAll();
+}
 function deckToGrave(){
   if(!Z.deck.length) return;
   const id = Z.deck.shift();
@@ -835,7 +873,14 @@ function takeFromSource(ctx){
   if(ctx.kind === "stacktop"){
     const i = Z.battle.findIndex(s=>s.id===ctx.stackId);
     if(i<0) return [];
-    const st = Z.battle.splice(i,1)[0];
+    const st = Z.battle[i];
+    // 個別モードで2枚以上重なっている場合は、一番上の1枚だけを取り出す（残りは場に残す）
+    if((st.moveMode||"single") === "single" && !st.groupId && st.cardIds.length >= 2){
+      const topId = st.cardIds.shift();
+      return [topId];
+    }
+    // それ以外（まとめて／リンク／1枚）はスタックごと取り出す
+    Z.battle.splice(i,1);
     return [...st.cardIds, ...st.seals];
   }
   if(ctx.kind === "under" || ctx.kind === "seal"){
@@ -883,7 +928,19 @@ function enterZone(ids, zone){
     if(zone==="hand" || zone==="mana" || zone==="grave") c.faceUp = true;
   }
 }
-function dropTo(ids, dropName, ev){
+/* 山札ビューアーからカードを各ゾーンへ移動（盾＝裏向きシールド／場＝表向きバトル） */
+function moveDeckCardToZone(id, act){
+  if(act === "shield"){
+    cards[id].tapped = false; cards[id].faceUp = false; // 裏向き
+    Z.shield.push({id:"sh"+(nextShieldId++), cardIds:[id]});
+  } else if(act === "battle"){
+    cards[id].tapped = false; cards[id].faceUp = true;  // 表向き
+    addStack([id], 12, 12);
+  } else {
+    dropTo([id], act, {clientX:0,clientY:0});
+  }
+}
+function dropTo(ids, dropName, ev, srcCtx){
   if(!ids.length) return;
   if(dropName === "battle"){
     const rect = $("#battleZone").getBoundingClientRect();
@@ -906,12 +963,84 @@ function dropTo(ids, dropName, ev){
     for(const id of ids){ cards[id].faceUp=true; cards[id].tapped=false; }
     Z.hyper.push(...ids);
   }else if(dropName === "shield"){
-    for(const id of ids){ cards[id].tapped=false; cards[id].faceUp=false; }
-    Z.shield.push({id:"sh"+(nextShieldId++), cardIds:ids});
+    // 手札から置かれたシールドは表向き、それ以外は裏向き
+    const fromHand = srcCtx && srcCtx.kind === "zone" && srcCtx.zone === "hand";
+    for(const id of ids){ cards[id].tapped=false; cards[id].faceUp = !!fromHand; }
+    const shId = "sh"+(nextShieldId++);
+    Z.shield.push({id:shId, cardIds:ids});
+    // 裏向き（手札以外から）で置かれた場合のみ、点線で一時ハイライト
+    _justPlacedShield = fromHand ? null : shId;
   }else if(["hand","mana","grave"].includes(dropName)){
     enterZone(ids, dropName);
     Z[dropName].push(...ids);
   }
+}
+/* カードを「番号付き重ねグループ」として重ねる。
+   d = detachForStackの戻り（ids/seals）、st = 重ね先スタック。 */
+function stackOntoGroup(d, st, where){
+  if(!d.ids.length){ return; }
+  // where: "top"=上に乗せる（大きい番号）, "bottom"=一番下に置く（番号1側）
+  // 重ね先stをグループ化（未グループなら新規）。viewModeは既存を引き継ぎ、無ければ"spread"
+  let gid = st.groupId;
+  if(!gid){
+    gid = "g"+(nextStackId++);
+    st.groupId = gid; st.groupLayout = "stacknum"; st.gx = 0; st.gy = 0;
+    st.seq = 1;
+    if(!st.viewMode) st.viewMode = "spread";
+  }
+  const view = (Z.battle.find(s=>s.groupId===gid && s.viewMode) || st).viewMode || "spread";
+  if(where === "bottom"){
+    // 既存メンバーの番号を後ろにずらし、取り出したカードを下（番号1〜）に入れる
+    const members = Z.battle.filter(s=>s.groupId===gid);
+    const add = d.ids.length;
+    members.forEach(m=>{ m.seq = (m.seq||0) + add; });
+    let seq = 0;
+    for(const id of d.ids){
+      cards[id].faceUp = true;
+      cards[id].tapped = !!cards[st.cardIds[0]].tapped; // 重ね先と同じタップ状態で重なる
+      addStack([id], st.x, st.y);
+      const ns = Z.battle[Z.battle.length-1];
+      seq += 1;
+      ns.groupId = gid; ns.groupLayout = "stacknum"; ns.seq = seq; ns.viewMode = view;
+    }
+  } else {
+    // 上に乗せる（大きい番号）
+    const members = Z.battle.filter(s=>s.groupId===gid);
+    let maxSeq = 0;
+    members.forEach(m=>{ maxSeq = Math.max(maxSeq, m.seq||0); });
+    let seq = maxSeq;
+    for(const id of d.ids){
+      cards[id].faceUp = true;
+      cards[id].tapped = !!cards[st.cardIds[0]].tapped; // 重ね先と同じタップ状態で重なる
+      addStack([id], st.x, st.y);
+      const ns = Z.battle[Z.battle.length-1];
+      seq += 1;
+      ns.groupId = gid; ns.groupLayout = "stacknum"; ns.seq = seq; ns.viewMode = view;
+    }
+  }
+  // viewModeをグループ全員で統一
+  Z.battle.filter(s=>s.groupId===gid).forEach(m=>{ m.viewMode = view; });
+  layoutStackGroup(gid); // 表示モードに応じてgx/gyを再計算
+  if(d.seals.length){ st.seals.push(...d.seals); }
+}
+/* 重ねグループのgx/gyを、viewMode("spread"=ずれて重なる / "stack"=連なる)に応じて配置 */
+function layoutStackGroup(gid){
+  const members = Z.battle.filter(s=>s.groupId===gid && s.seq);
+  if(!members.length) return;
+  const cw = parseInt(sizeRange.value,10);
+  const off = Math.max(4, Math.round(cw*0.18));
+  const view = members[0].viewMode || "spread";
+  members.sort((a,b)=>(a.seq||0)-(b.seq||0));
+  members.forEach((m,i)=>{
+    if(view === "stack"){
+      // 連なる見え方：ほぼ同じ位置に少しだけ下方向にずらす（cardIds型に近い見た目）
+      m.gx = 0; m.gy = i * Math.max(2, Math.round(cw*0.06));
+    } else {
+      // ずれて重なる見え方（カード名が見える）
+      m.gx = i * off; m.gy = i * off;
+    }
+  });
+  normalizeGroup(gid);
 }
 function applyStackDrop(ctx, stackId, mode){
   const st = findStack(stackId);
@@ -919,11 +1048,17 @@ function applyStackDrop(ctx, stackId, mode){
   const d = detachForStack(ctx);
   if(!d.ids.length && !d.seals.length){ renderAll(); return; }
   if(mode === "top"){
+    // 1スタック方式：取り出したカードを上に重ねる（cardIds[0]が一番上）。
+    // 重ね先と同じタップ状態・表向きにして連ねる。
+    for(const id of d.ids){ cards[id].faceUp = true; cards[id].tapped = !!cards[st.cardIds[0]].tapped; }
     st.cardIds = [...d.ids, ...st.cardIds];
     st.seals.push(...d.seals);
+    st.moveMode = "bulk"; // 重ねた直後は必ず「まとめて」
   }else if(mode === "bottom"){
+    for(const id of d.ids){ cards[id].faceUp = true; cards[id].tapped = !!cards[st.cardIds[0]].tapped; }
     st.cardIds = [...st.cardIds, ...d.ids];
     st.seals.push(...d.seals);
+    st.moveMode = "bulk"; // 重ねた直後は必ず「まとめて」
   }else if(mode === "seal"){
     const all = [...d.ids, ...d.seals];
     for(const id of all){ cards[id].faceUp=false; cards[id].tapped=false; }
@@ -1024,9 +1159,12 @@ function staticCardEl(id){
   }
   return el;
 }
-const CIV_BG = {"光":"#f4ecc0","水":"#cfe5f7","闇":"#c9c0d6","火":"#f5cfc0","自然":"#cfe3c0","ゼロ":"#e3e3e3"};
-const CIV_BD = {"光":"#cdb247","水":"#3f8fd4","闇":"#6a5a8a","火":"#d45a3f","自然":"#5a9a4a","ゼロ":"#9a9a9a"};
-function civBackground(cs){
+const CIV_BG = {"光":"#f4ecc0","水":"#cfe5f7","闇":"#c9c0d6","火":"#f5cfc0","自然":"#aed47e","ゼロ":"#e3e3e3"};
+const CIV_BD = {"光":"#cdb247","水":"#3f8fd4","闇":"#6a5a8a","火":"#d45a3f","自然":"#4e8f2e","ゼロ":"#9a9a9a"};
+const CIV_ORDER = {"光":0,"水":1,"闇":2,"火":3,"自然":4,"無色":5,"ゼロ":5};
+function sortCivs(cs){ return (cs||[]).slice().sort((a,b)=>(CIV_ORDER[a]??9)-(CIV_ORDER[b]??9)); }
+function civBackground(cs0){
+  const cs = sortCivs(cs0);
   if(!cs || !cs.length) return "";
   if(cs.length===1) return CIV_BG[cs[0]] || "";
   const n = cs.length;
@@ -1038,7 +1176,7 @@ function civBorder(cs){
   return cs.length===1 ? (CIV_BD[cs[0]]||"") : "#c9a23f";
 }
 function applyCivStyle(el, c, civsOverride){
-  const cs = civsOverride || c.civs || [];
+  const cs = sortCivs(civsOverride || c.civs || []);
   if(cs.length===0) return;
   if(cs.length===1){
     el.style.background = CIV_BG[cs[0]] || "";
@@ -1056,6 +1194,24 @@ function renderZoneFlex(zone, containerId, labelText){
   for(const id of Z[zone]){
     box.appendChild(cardEl(id, {kind:"zone", zone, cardId:id}));
   }
+  // 手札のみ：右端に「表/裏」「混ぜる」ボタンを縦に配置
+  if(zone === "hand"){
+    const panel = document.createElement("div");
+    panel.className = "hand-tools";
+    const bFlip = document.createElement("button");
+    bFlip.className = "small"; bFlip.textContent = "表/裏"; bFlip.type = "button";
+    bFlip.onclick = ()=>{ flipAllHand(); };
+    const bShuf = document.createElement("button");
+    bShuf.className = "small"; bShuf.textContent = "混ぜる"; bShuf.type = "button";
+    bShuf.onclick = ()=>{ shuffle(Z.hand); renderAll(); };
+    panel.appendChild(bFlip); panel.appendChild(bShuf);
+    box.appendChild(panel);
+  }
+}
+/* 手札のカードすべての表裏を反転する（表→裏、裏→表） */
+function flipAllHand(){
+  for(const id of Z.hand){ if(cards[id]) cards[id].faceUp = !cards[id].faceUp; }
+  renderAll();
 }
 function renderBattle(){
   const bz = $("#battleZone");
@@ -1104,23 +1260,106 @@ function renderBattle(){
       ms.forEach(m=> m.cardIds.forEach(cid=>{ cards[cid].tapped = anyUn; }));
       renderAll();
     }, false));
-    tabBar.appendChild(mkTab("解除", "tab-unlink", ()=>{ unlinkGroup(gid); renderAll(); }, false));
+    // 重ねグループ（seqを持つ）は「ビュー」（緑）、リンクグループは「解除」（赤）
+    const isStackGroup = members.some(m=> m.seq);
+    if(isStackGroup){
+      tabBar.appendChild(mkTab("ビュー", "tab-view", ()=>{
+        const cur = (members.find(m=>m.viewMode)||{}).viewMode || "spread";
+        const next = cur === "spread" ? "stack" : "spread";
+        Z.battle.filter(s=>s.groupId===gid).forEach(m=>{ m.viewMode = next; });
+        layoutStackGroup(gid);
+        renderAll();
+      }, false));
+    } else {
+      tabBar.appendChild(mkTab("解除", "tab-unlink", ()=>{ unlinkGroup(gid); renderAll(); }, false));
+    }
     grpEl.appendChild(tabBar);
 
     // 各カードはグループ内オフセット(gx,gy)で絶対配置（L字など自由形に対応）
     relayoutGroup(gid);
-    const GPAD = 10;
+    const GPAD = 6;
     let maxX=0, maxY=0;
     const cwv = parseInt(sizeRange.value,10), chv = Math.round(cwv*1.4);
     members.forEach(m=>{ maxX=Math.max(maxX,(m.gx||0)+cwv); maxY=Math.max(maxY,(m.gy||0)+chv); });
-    grpEl.style.width  = (maxX + GPAD*2) + "px";
-    grpEl.style.height = (maxY + GPAD*2) + "px";
+
+    // 重ねグループで「連なる見え方(stack)」のときは、一番上のカードの下に
+    // 他のカードを小さく連ねる専用描画（変更前の見た目）にする
+    const stackView = members.some(m=>m.seq) && (members.find(m=>m.viewMode)||{}).viewMode === "stack";
+    if(stackView){
+      const sorted = members.slice().sort((a,b)=>(b.seq||0)-(a.seq||0)); // 上(大seq)が先頭
+      const topM = sorted[0];
+      // グループ枠のどこにドロップしても一番上のカードが対象になるよう、枠に一番上IDを付与
+      grpEl.dataset.stack = topM.id;
+      // 縦並び：一番上カード(chv) + 下に連なる小カード(各 chv*0.78 + gap2px)
+      const underH = Math.round(chv*0.78) + 2;
+      grpEl.style.width  = (cwv + GPAD*2) + "px";
+      grpEl.style.height = (GPAD*2 + chv + 3 + (sorted.length-1)*underH) + "px";
+      const sEl = document.createElement("div");
+      sEl.className = "stack";
+      sEl.style.position = "absolute";
+      sEl.style.left = GPAD + "px";
+      sEl.style.top  = GPAD + "px";
+      sEl.dataset.stack = topM.id;
+      sEl.setAttribute("data-drop","stack");
+      const ce = cardEl(topM.cardIds[0], {kind:"stacktop", stackId:topM.id, cardId:topM.cardIds[0]});
+      ce.setAttribute("data-drop","stack"); ce.dataset.stack = topM.id;
+      // 一番上カードを相対ラッパーで囲み、番号バッジをカード右上に固定
+      const topWrap = document.createElement("div");
+      topWrap.style.position = "relative";
+      topWrap.style.width = "var(--cw)"; topWrap.style.height = "var(--ch)";
+      topWrap.appendChild(ce);
+      if(topM.seq){
+        const nb = document.createElement("div"); nb.className="stack-seq"; nb.textContent=topM.seq;
+        topWrap.appendChild(nb);
+      }
+      sEl.appendChild(topWrap);
+      // 下に連なる他カード（小さく表示）＝縦方向に連ねる
+      if(sorted.length > 1){
+        const unders = document.createElement("div");
+        unders.className = "stack-unders stack-unders-v";
+        for(let i=1;i<sorted.length;i++){
+          const um = sorted[i];
+          const uc = cardEl(um.cardIds[0], {kind:"under", stackId:um.id, cardId:um.cardIds[0]});
+          // 各カードに番号バッジ
+          const wrapU = document.createElement("div");
+          wrapU.style.position = "relative"; wrapU.style.display = "inline-block";
+          wrapU.appendChild(uc);
+          const nb = document.createElement("div"); nb.className="stack-seq"; nb.textContent=um.seq;
+          wrapU.appendChild(nb);
+          unders.appendChild(wrapU);
+        }
+        sEl.appendChild(unders);
+      }
+      grpEl.appendChild(sEl);
+      members.forEach(m=> rendered.add(m.id));
+      bz.appendChild(grpEl);
+      continue;
+    }
+
+    const grpW = maxX + GPAD*2, grpH = maxY + GPAD*2;
+    grpEl.style.width  = grpW + "px";
+    grpEl.style.height = grpH + "px";
+    // 枠がバトルゾーンからはみ出さないよう、left/topをクランプ（タブ分の上端余白も確保）
+    {
+      const bzr = bz.getBoundingClientRect();
+      const TABH2 = 22;
+      let lx = parseFloat(grpEl.style.left) || 0;
+      let ty = parseFloat(grpEl.style.top) || 0;
+      lx = Math.max(0, Math.min(bzr.width - grpW - 2, lx));
+      ty = Math.max(TABH2, Math.min(bzr.height - grpH - 2, ty));
+      if(lx < 0) lx = 0;
+      if(ty < TABH2) ty = TABH2;
+      grpEl.style.left = lx + "px";
+      grpEl.style.top  = ty + "px";
+    }
     for(const m of members){
       const sEl = document.createElement("div");
       sEl.className = "stack";
       sEl.style.position = "absolute";
       sEl.style.left = ((m.gx||0) + GPAD) + "px";
       sEl.style.top  = ((m.gy||0) + GPAD) + "px";
+      // 重ねグループ（番号付き）は seq 順に重ね、大きい番号を前面に
+      if(m.seq){ sEl.style.zIndex = String(10 + m.seq); }
       sEl.dataset.stack = m.id;
       sEl.setAttribute("data-drop","stack");
       const topId = m.cardIds[0];
@@ -1148,6 +1387,13 @@ function renderBattle(){
           unders.appendChild(cardEl(uid, {kind:"under", stackId:m.id, cardId:uid}));
         }
         sEl.appendChild(unders);
+      }
+      // 重ねグループの番号バッジ（1=下、大きい数字=上）
+      if(m.seq){
+        const numb = document.createElement("div");
+        numb.className = "stack-seq";
+        numb.textContent = m.seq;
+        sEl.appendChild(numb);
       }
       grpEl.appendChild(sEl);
       rendered.add(m.id);
@@ -1182,13 +1428,39 @@ function renderBattle(){
       });
       topBox.appendChild(sl);
     }
+    // 重ね枚数ぶんの番号（下=1, 上=最大）。一番上はcardIds[0]＝最大番号。
+    const total = st.cardIds.length;
+    if(total > 1){
+      const nb = document.createElement("div");
+      nb.className = "stack-seq"; nb.textContent = total; // 一番上の番号
+      topBox.appendChild(nb);
+      // 一番上カードの上の「まとめて／個別」切替タブ。
+      // まとめて：一番上ドラッグで構成カード全部が動く。個別：一番上ドラッグで上の1枚だけ動く。
+      const mtab = document.createElement("div");
+      mtab.className = "stack-movetab";
+      const mode = st.moveMode || "bulk";
+      mtab.textContent = (mode === "bulk") ? "まとめて" : "個別";
+      mtab.title = "タップで「まとめて／個別」を切替";
+      mtab.onclick = (ev)=>{
+        ev.stopPropagation();
+        const s2 = findStack(st.id);
+        if(s2){ s2.moveMode = (s2.moveMode === "bulk") ? "single" : "bulk"; renderAll(); }
+      };
+      topBox.appendChild(mtab);
+    }
     wrap.appendChild(topBox);
     if(st.cardIds.length > 1){
       const unders = document.createElement("div");
-      unders.className = "stack-unders";
-      for(const uid of st.cardIds.slice(1)){
-        unders.appendChild(cardEl(uid, {kind:"under", stackId:st.id, cardId:uid}));
-      }
+      unders.className = "stack-unders"; // 横並び：2枚目が一番上の真下、以降は右(x方向)へ
+      st.cardIds.slice(1).forEach((uid, idx)=>{
+        const wrapU = document.createElement("div");
+        wrapU.style.position = "relative"; wrapU.style.display = "inline-block";
+        wrapU.appendChild(cardEl(uid, {kind:"under", stackId:st.id, cardId:uid}));
+        const nb = document.createElement("div");
+        nb.className = "stack-seq"; nb.textContent = (total - 1 - idx); // 下に行くほど小さい番号
+        wrapU.appendChild(nb);
+        unders.appendChild(wrapU);
+      });
       wrap.appendChild(unders);
     }
     bz.appendChild(wrap);
@@ -1198,16 +1470,47 @@ function renderBattle(){
 function renderShields(){
   const box = $("#shieldZone");
   box.innerHTML = `<span class="zone-label">シールド（${Z.shield.length}）</span>`;
+  const cwv = parseInt(sizeRange.value,10);
+  const shiftX = Math.max(3, Math.round(cwv*0.14)); // 1枚あたりの横ずらし量
   for(const sh of Z.shield){
     const wrap = document.createElement("div");
     wrap.className = "shieldstack";
     wrap.dataset.shield = sh.id;
     wrap.setAttribute("data-drop","shieldstack");
+    const n = sh.cardIds.length;
+    const dy = Math.max(2, Math.round(cwv*0.06)); // 連なりの縦ずらし量
+    // 順番にカードオブジェクトが重なる見え方。一番上(cardIds[0])が最前面・操作対象。
+    // 下のカードは実際の表裏(faceUp)を反映して描画（裏表混在に対応）。
+    if(n > 1){
+      for(let i = n - 1; i >= 1; i--){
+        const uid = sh.cardIds[i];
+        const under = staticCardEl(uid);   // 各カードの表裏を正しく反映
+        under.style.position = "absolute";
+        under.style.left = "0";
+        under.style.top = (i * dy) + "px";
+        under.style.zIndex = String(n - i);
+        under.style.pointerEvents = "none";
+        wrap.appendChild(under);
+      }
+    }
     const topId = sh.cardIds[0];
-    wrap.appendChild(cardEl(topId, {kind:"shieldstack", shieldId:sh.id, cardId:topId}));
-    if(sh.cardIds.length > 1){
+    const topEl = cardEl(topId, {kind:"shieldstack", shieldId:sh.id, cardId:topId});
+    topEl.style.position = "relative";
+    topEl.style.zIndex = String(n + 1);
+    wrap.appendChild(topEl);
+    // 「目立たせる」シールドは、バトルゾーン方向（上）へ長辺の約15%出っ張らせる
+    if(sh.highlight){
+      const chv = Math.round(cwv*1.4);
+      wrap.style.marginTop = "-" + Math.round(chv*0.15) + "px";
+      wrap.classList.add("shield-highlight");
+    }
+    // 余白（連なるぶん下方向にスペースを確保）
+    if(n > 1){ wrap.style.paddingBottom = ((n - 1) * dy) + "px"; }
+    // 裏向きで置かれた直後のシールドは点線で一時ハイライト
+    if(_justPlacedShield === sh.id){ wrap.classList.add("shield-justplaced"); }
+    if(n > 1){
       const b = document.createElement("div");
-      b.className = "scount"; b.textContent = "x"+sh.cardIds.length;
+      b.className = "scount"; b.textContent = "x"+n;
       wrap.appendChild(b);
     }
     box.appendChild(wrap);
@@ -1278,7 +1581,7 @@ function layoutOverlap(sel){
   const gap = parseFloat(cs.columnGap) || 0;
   if(n*cw + (n-1)*gap <= avail) return;
   let m = (avail - cw)/(n-1) - cw - gap;
-  const maxOverlap = -(cw * 2/3);
+  const maxOverlap = -(cw * 0.6);
   if(m < maxOverlap) m = maxOverlap;
   if(m > 0) m = 0;
   items.forEach((el,i)=>{ if(i < n-1) el.style.marginRight = m + "px"; });
@@ -1292,6 +1595,152 @@ function relayoutZones(){
 
 /* ============ リンクグループ移動 ============ */
 /* 「移動」タブをドラッグするとグループ全体が動く */
+/* 重ねスタック全体を移動するタブ（1スタック版） */
+function attachStackDragTab(tabEl, stackId){
+  tabEl.style.touchAction = "none";
+  let dst = null;
+  tabEl.addEventListener("pointerdown", e=>{
+    e.preventDefault(); e.stopPropagation();
+    try{ tabEl.setPointerCapture(e.pointerId); }catch(_){}
+    tabEl._capId = e.pointerId;
+    const st = findStack(stackId);
+    dst = {startX:e.clientX, startY:e.clientY, ox: st?st.x:0, oy: st?st.y:0, moved:false};
+  });
+  tabEl.addEventListener("pointermove", e=>{
+    if(!dst) return;
+    const dx=e.clientX-dst.startX, dy=e.clientY-dst.startY;
+    if(!dst.moved && Math.hypot(dx,dy)<6) return;
+    dst.moved=true;
+    const bz=$("#battleZone"); if(!bz) return;
+    const bzr=bz.getBoundingClientRect();
+    const wrap = tabEl.closest(".stack");
+    const cw = parseInt(sizeRange.value,10), ch = Math.round(cw*1.4);
+    const nx=Math.max(0,Math.min(bzr.width-cw-4, dst.ox+dx));
+    const ny=Math.max(0,Math.min(bzr.height-ch-4, dst.oy+dy));
+    if(wrap){ wrap.style.left=nx+"px"; wrap.style.top=ny+"px"; }
+    const st = findStack(stackId);
+    if(st){ st.x=nx; st.y=ny; }
+  });
+  tabEl.addEventListener("pointerup", e=>{
+    const moved = dst && dst.moved;
+    dst=null;
+    // ポインターキャプチャを先に解放しないと elementFromPoint がタブ自身を返してしまう
+    try{ tabEl.releasePointerCapture(tabEl._capId); }catch(_){}
+    if(!moved){ return; }
+    // ドロップ先のゾーンを判定（タブと重ねスタックを一時的に判定対象外にする）
+    const tabPrev = tabEl.style.pointerEvents; tabEl.style.pointerEvents = "none";
+    const wrap = tabEl.closest(".stack");
+    const wrapPrev = wrap ? wrap.style.pointerEvents : null;
+    if(wrap) wrap.style.pointerEvents = "none";
+    const tgt = document.elementFromPoint(e.clientX, e.clientY);
+    tabEl.style.pointerEvents = tabPrev;
+    if(wrap) wrap.style.pointerEvents = wrapPrev;
+    const dropEl = tgt && tgt.closest ? tgt.closest("[data-drop]") : null;
+    const dropName = dropEl ? dropEl.dataset.drop : null;
+    bulkMoveStack(stackId, dropName);
+  });
+  tabEl.addEventListener("pointercancel", ()=>{ dst=null; });
+}
+/* 重ねスタックを丸ごと別ゾーンへ移動。シールド/山札は選択メニューを出す。 */
+function bulkMoveStack(stackId, dropName){
+  const st = findStack(stackId);
+  if(!st){ renderAll(); return; }
+  const ids = st.cardIds.slice(); // 上→下の順
+  if(dropName === "hand" || dropName === "mana" || dropName === "grave"){
+    Z.battle = Z.battle.filter(s=>s!==st);
+    enterZone(ids, dropName);
+    Z[dropName].push(...ids);
+    renderAll(); return;
+  }
+  if(dropName === "shieldstack" || dropName === "shield"){
+    openBulkShieldMenu(stackId); return;
+  }
+  if(dropName === "deckpile" || dropName === "decktop" || dropName === "deckbottom" || dropName === "deckinsert"){
+    openBulkDeckMenu(stackId); return;
+  }
+  // それ以外（バトルゾーン等）は位置移動のみ（すでにpointermoveで反映済み）
+  renderAll();
+}
+/* まとめてシールド化メニュー */
+function openBulkShieldMenu(stackId){
+  const st = findStack(stackId);
+  if(!st){ renderAll(); return; }
+  openModal(`<h2>まとめてシールドへ</h2>
+    <div style="font-size:11px;color:var(--sub)">${st.cardIds.length}枚の重ねをシールドにする方法を選びます。</div>
+    <div class="btn-grid">
+      <button id="bs1">まとめて1枚のシールド（表向き）</button>
+      <button id="bs2">まとめて1枚のシールド（裏向き）</button>
+      <button id="bs3">1枚1枚シールド化（表向き）</button>
+      <button id="bs4">1枚1枚シールド化（裏向き）</button>
+      <button id="bsCancel">やめる</button>
+    </div>`);
+  const ids = st.cardIds.slice();
+  const removeStack = ()=>{ Z.battle = Z.battle.filter(s=>s!==st); };
+  $("#bs1").onclick = ()=>{ removeStack(); ids.forEach(id=>{cards[id].faceUp=true;cards[id].tapped=false;}); Z.shield.push({id:"sh"+(nextShieldId++), cardIds:ids}); closeModal(); renderAll(); };
+  $("#bs2").onclick = ()=>{ removeStack(); ids.forEach(id=>{cards[id].faceUp=false;cards[id].tapped=false;}); Z.shield.push({id:"sh"+(nextShieldId++), cardIds:ids}); closeModal(); renderAll(); };
+  $("#bs3").onclick = ()=>{ removeStack(); ids.forEach(id=>{cards[id].faceUp=true;cards[id].tapped=false; Z.shield.push({id:"sh"+(nextShieldId++), cardIds:[id]});}); closeModal(); renderAll(); };
+  $("#bs4").onclick = ()=>{ removeStack(); ids.forEach(id=>{cards[id].faceUp=false;cards[id].tapped=false; Z.shield.push({id:"sh"+(nextShieldId++), cardIds:[id]});}); closeModal(); renderAll(); };
+  $("#bsCancel").onclick = ()=>{ closeModal(); renderAll(); };
+}
+/* まとめて山札へ：順番変更＋3択メニュー */
+function openBulkDeckMenu(stackId){
+  const st = findStack(stackId);
+  if(!st){ renderAll(); return; }
+  let order = st.cardIds.slice(); // 編集可能な順番（上が山札の上）
+  const render = ()=>{
+    const list = order.map((id,i)=>`<div class="deck-item bulk-deck-item" data-card="${id}">
+        <span class="pos">${i+1}</span>
+        <span class="nm">${escapeHtml(cards[id].name || cards[id].front || "")}</span>
+        <span style="font-size:10px;color:var(--sub)">≡ ドラッグで並替</span>
+      </div>`).join("");
+    openModal(`<h2>まとめて山札へ</h2>
+      <div style="font-size:11px;color:var(--sub)">カードをドラッグして順番を入れ替えできます。リストの上が山札の上、下が山札の下です。</div>
+      <div id="bulkDeckList" style="max-height:200px;overflow-y:auto">${list}</div>
+      <div class="btn-grid">
+        <button id="bd1">この順番で上に戻す</button>
+        <button id="bd2">この順番で下に戻す</button>
+        <button id="bd3">山札に加えてシャッフル</button>
+        <button id="bdCancel">やめる</button>
+      </div>`);
+    // カードのドラッグで並べ替え（pointerベース）
+    modal.querySelectorAll(".bulk-deck-item").forEach(el=>{
+      const id = el.dataset.card;
+      let pd=null, moved=false;
+      el.style.cursor = "grab"; el.style.touchAction = "none";
+      el.addEventListener("pointerdown", ev=>{
+        ev.preventDefault(); pd={x:ev.clientX,y:ev.clientY,pid:ev.pointerId}; moved=false;
+        try{ el.setPointerCapture(ev.pointerId); }catch(_){}
+      });
+      el.addEventListener("pointermove", ev=>{
+        if(!pd) return;
+        if(!moved && Math.hypot(ev.clientX-pd.x, ev.clientY-pd.y)>8){ moved=true; el.style.opacity=".5"; }
+      });
+      el.addEventListener("pointerup", ev=>{
+        if(!pd) return;
+        try{ el.releasePointerCapture(pd.pid); }catch(_){}
+        el.style.opacity="";
+        if(moved){
+          const savedPE=el.style.pointerEvents; el.style.pointerEvents="none";
+          const tgt=document.elementFromPoint(ev.clientX, ev.clientY);
+          el.style.pointerEvents=savedPE;
+          const tgtEl = tgt && tgt.closest ? tgt.closest(".bulk-deck-item") : null;
+          if(tgtEl && tgtEl.dataset.card !== id){
+            const from=order.indexOf(id), to=order.indexOf(tgtEl.dataset.card);
+            if(from>=0 && to>=0){ order.splice(from,1); order.splice(to,0,id); render(); }
+          }
+        }
+        pd=null; moved=false;
+      });
+      el.addEventListener("pointercancel", ()=>{ pd=null; moved=false; el.style.opacity=""; });
+    });
+    const removeStack = ()=>{ Z.battle = Z.battle.filter(s=>s!==st); };
+    $("#bd1").onclick = ()=>{ removeStack(); order.forEach(id=>{cards[id].faceUp=false;cards[id].tapped=false;}); Z.deck = [...order, ...Z.deck]; closeModal(); renderAll(); };
+    $("#bd2").onclick = ()=>{ removeStack(); order.forEach(id=>{cards[id].faceUp=false;cards[id].tapped=false;}); Z.deck = [...Z.deck, ...order]; closeModal(); renderAll(); };
+    $("#bd3").onclick = ()=>{ removeStack(); order.forEach(id=>{cards[id].faceUp=false;cards[id].tapped=false;}); Z.deck.push(...order); shuffle(Z.deck); closeModal(); renderAll(); };
+    $("#bdCancel").onclick = ()=>{ closeModal(); renderAll(); };
+  };
+  render();
+}
 function attachGroupDragTab(tabEl, gid){
   tabEl.style.touchAction = "none";
   let st = null;
@@ -1453,26 +1902,32 @@ function linkStacks(idA, idB, layout){
     const gid = stB.groupId;
     // stAが別グループだった場合は、その全員を移してくる
     const movers = stA.groupId ? Z.battle.filter(s=>s.groupId===stA.groupId) : [stA];
-    // stBのグループ内オフセットを基準に、指定方向の隣へstAを置く
+    // stB（基準カード）の指定方向の「すぐ隣」にstAを挿入し、
+    // その方向にある既存カードを1枚分ずつ押しのける（AとBの間に割り込む）
     const bgx = stB.gx||0, bgy = stB.gy||0;
-    let tx = bgx, ty = bgy, stepX = 0, stepY = 0;
-    if(lay==="up")        { ty = bgy - ch - pad; stepY = -(ch+pad); }
-    else if(lay==="down" || lay==="col") { ty = bgy + ch + pad; stepY = (ch+pad); }
-    else if(lay==="left") { tx = bgx - cw - pad; stepX = -(cw+pad); }
-    else                  { tx = bgx + cw + pad; stepX = (cw+pad); } // right / row
-    // 重なり回避：その位置が既に使われていたら同方向にずらす
-    const occupied = (gx,gy)=> Z.battle.some(s=> s.groupId===gid && Math.abs((s.gx||0)-gx)<cw*0.5 && Math.abs((s.gy||0)-gy)<ch*0.5);
-    let guard=0;
-    while(occupied(tx,ty) && guard++<20){ tx+=stepX; ty+=stepY; }
+    const stepX = (lay==="left") ? -(cw+pad) : (lay==="up"||lay==="down"||lay==="col") ? 0 : (cw+pad);
+    const stepY = (lay==="up") ? -(ch+pad) : (lay==="down"||lay==="col") ? (ch+pad) : 0;
+    const horiz = (stepX !== 0);
+    // 基準カードより指定方向側にある既存カードを、1枚分その方向へ押しのける
+    Z.battle.filter(s=>s.groupId===gid).forEach(m=>{
+      if(m === stB) return;
+      if(horiz){
+        // 右リンク: bgxより右(>=)のカードを右へ／左リンク: bgxより左(<=)を左へ
+        if(stepX > 0 && (m.gx||0) > bgx) m.gx = (m.gx||0) + (cw+pad);
+        if(stepX < 0 && (m.gx||0) < bgx) m.gx = (m.gx||0) - (cw+pad);
+      } else {
+        if(stepY > 0 && (m.gy||0) > bgy) m.gy = (m.gy||0) + (ch+pad);
+        if(stepY < 0 && (m.gy||0) < bgy) m.gy = (m.gy||0) - (ch+pad);
+      }
+    });
+    const tx = bgx + stepX, ty = bgy + stepY;
     if(movers.length===1){
       stA.gx = tx; stA.gy = ty;
     } else {
-      // グループごと移す場合は相対形を保ったまま平行移動
       const a0gx = stA.gx||0, a0gy = stA.gy||0;
       movers.forEach(m=>{ m.gx = (m.gx||0) - a0gx + tx; m.gy = (m.gy||0) - a0gy + ty; });
     }
     movers.forEach(m=>{ m.groupId = gid; m.groupLayout = "free"; m.x = stB.x; m.y = stB.y; });
-    // 負オフセットを正規化（左上を0,0に）
     normalizeGroup(gid);
     return;
   }
@@ -1485,6 +1940,33 @@ function linkStacks(idA, idB, layout){
   else if(lay==="left") { stA.gx = -(cw+pad); stA.gy = 0; }
   else                  { stA.gx = cw + pad; stA.gy = 0; } // right / row
   [stA, stB].forEach(st=>{ st.groupId = gid; st.groupLayout = "free"; st.x = stB.x; st.y = stB.y; });
+  normalizeGroup(gid);
+}
+/* 重ねグループの番号を、現在のseq順を保ったまま 1,2,3... に振り直す */
+function resequenceStack(gid){
+  const members = Z.battle.filter(s=>s.groupId===gid && s.seq);
+  members.sort((a,b)=>(a.seq||0)-(b.seq||0));
+  members.forEach((m,i)=>{ m.seq = i+1; });
+}
+/* リンクが横一列または縦一列（3枚以上）のとき、カードが抜けた隙間を詰めて再構成する。
+   縦横が混在しているときは何もしない（現状維持）。 */
+function compactLinkLine(gid, cw, ch){
+  const members = Z.battle.filter(s=>s.groupId===gid);
+  if(members.length < 2) return;
+  const pad = 4;
+  const xs = members.map(m=>m.gx||0), ys = members.map(m=>m.gy||0);
+  const sameX = xs.every(v=>v===xs[0]); // 全員同じx → 縦一列
+  const sameY = ys.every(v=>v===ys[0]); // 全員同じy → 横一列
+  if(sameY && !sameX){
+    // 横一列：x順に並べ直して隙間を詰める
+    members.sort((a,b)=>(a.gx||0)-(b.gx||0));
+    members.forEach((m,i)=>{ m.gx = i*(cw+pad); m.gy = ys[0]; });
+  } else if(sameX && !sameY){
+    // 縦一列：y順に並べ直して隙間を詰める
+    members.sort((a,b)=>(a.gy||0)-(b.gy||0));
+    members.forEach((m,i)=>{ m.gy = i*(ch+pad); m.gx = xs[0]; });
+  }
+  // 混在時は何もしない
   normalizeGroup(gid);
 }
 /* グループの最小オフセットを0,0に揃え、実座標を保つ */
@@ -1548,7 +2030,7 @@ function unlinkGroup(gid){
     let ny = baseY + (m.gy||0);
     m.x = Math.max(0, Math.min(rect.width-cw-4, nx));
     m.y = Math.max(0, Math.min(rect.height-ch-4, ny));
-    m.groupId = null; m.groupLayout = null; m.gx = null; m.gy = null;
+    m.groupId = null; m.groupLayout = null; m.gx = null; m.gy = null; m.seq = null;
   });
   // 同座標に完全に重なっているカードがあれば少しずらす
   for(let i=0;i<members.length;i++){
@@ -1567,6 +2049,12 @@ let drag = null;
 let lastTap = {key:"", time:0};
 let pendingSingle = null;
 
+/* カード名でネット検索（新しいタブ/ウィンドウで開く） */
+function searchCardName(name){
+  const q = encodeURIComponent(name + " デュエルマスターズ");
+  const url = "https://www.google.com/search?q=" + q;
+  try{ window.open(url, "_blank", "noopener"); }catch(_){}
+}
 function attachPointer(el, ctx){
   el.style.touchAction = "none";
   el.addEventListener("pointerdown", e=>{
@@ -1575,9 +2063,23 @@ function attachPointer(el, ctx){
     e.stopPropagation();
     el.setPointerCapture(e.pointerId);
     el._capturedId = e.pointerId;
-    drag = {ctx, el, moved:false, longFired:false,
+    drag = {ctx, el, moved:false, longFired:false, _capturedId:e.pointerId,
             startX:e.clientX, startY:e.clientY,
             longTimer: null};
+    // 長押し：表向きのカードのみ、カード名でネット検索する
+    const lc = ctx && ctx.cardId ? cards[ctx.cardId] : null;
+    const isFaceUpCard = lc && lc.faceUp && (ctx.kind === "zone" || ctx.kind === "stacktop" ||
+                          ctx.kind === "shieldstack" || ctx.kind === "under");
+    if(isFaceUpCard){
+      drag.longTimer = setTimeout(()=>{
+        if(!drag || drag.el !== el || drag.moved) return;
+        drag.longFired = true;                       // タップ・ドロップを抑止
+        try{ el.releasePointerCapture(drag._capturedId || e.pointerId); }catch(_){}
+        const nm = (lc.name || (lc.front) || "").trim();
+        if(nm) searchCardName(nm);
+        cleanupDrag();                                // drag状態を確実に解放（固まり防止）
+      }, 500);
+    }
   });
   el.addEventListener("pointermove", e=>{
     if(!drag || drag.el!==el || drag.longFired) return;
@@ -1612,7 +2114,11 @@ function startGhost(ctx, el){
   let total = 0;
   if(ctx.kind === "stacktop"){
     const st = findStack(ctx.stackId);
-    if(st) total = st.cardIds.length + st.seals.length;
+    // 個別モードで重ねている場合は一番上1枚だけ動くので枚数表示しない。
+    // まとめてモード／リンク／単独のときだけ合計枚数を表示。
+    if(st && !((st.moveMode||"single")==="single" && !st.groupId && st.cardIds.length>=2)){
+      total = st.cardIds.length + st.seals.length;
+    }
   }else if(ctx.kind === "shieldstack"){
     const sh = findShield(ctx.shieldId);
     if(sh) total = sh.cardIds.length;
@@ -1646,7 +2152,10 @@ function finishDrop(e){
     // グループ枠に直接ドロップされた場合は、その枠の代表スタックIDを使う
     let stackId = dropEl.dataset.stack;
     if(!stackId && dropEl.dataset.group){
-      const gm = Z.battle.find(s=>s.groupId===dropEl.dataset.group);
+      // 重ねグループ（seqあり）は一番上(最大seq)を対象に、それ以外は最初のメンバー
+      const gms = Z.battle.filter(s=>s.groupId===dropEl.dataset.group);
+      const stackGm = gms.filter(s=>s.seq).sort((a,b)=>(b.seq||0)-(a.seq||0))[0];
+      const gm = stackGm || gms[0];
       if(gm) stackId = gm.id;
     }
     const srcSt = (ctx.kind === "stacktop") ? findStack(ctx.stackId) : null;
@@ -1663,14 +2172,23 @@ function finishDrop(e){
       if(sEl && sEl.getBoundingClientRect){
         const r = sEl.getBoundingClientRect();
         if(r.width){
-          const cx = r.left + r.width/2, cy = r.top + r.height/2;
-          const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
-          onCenter = dist < Math.min(cw2, ch2) * 0.75; // 中心付近（広め）で「重ね」
+          // ドラッグ中カードの中心が、ドロップ先カードの矩形に入っていれば「重ね」とみなす。
+          // 中心が枠内ならメニュー、外なら位置移動。z順による取りこぼしを減らす。
+          const inX = e.clientX >= r.left && e.clientX <= r.right;
+          const inY = e.clientY >= r.top  && e.clientY <= r.bottom;
+          onCenter = inX && inY;
         }
       }
     }
     if(ctx.kind === "stacktop" && ctx.stackId === stackId){
-      moveOwnStack(e);   // 自分自身の上で離した → 位置移動
+      // 自分自身の上で離した。リンク中(groupIdあり)は重ね全体を移動、
+      // 非リンクの重ね2枚以上なら一番上1枚を分離、1枚なら位置移動
+      const selfSt = findStack(stackId);
+      if(selfSt && selfSt.groupId){ moveOwnStack(e); }          // リンク中はリンク内移動
+      else if(selfSt && selfSt.cardIds.length >= 2 && (selfSt.moveMode||"single") === "single"){
+        detachTopCard(e, stackId); return;                       // 個別モード＝一番上1枚分離
+      }
+      else moveOwnStack(e);                                       // まとめてモード/1枚＝全体移動
     }else if(sameGroup && !onCenter){
       moveOwnStack(e);   // 同グループ内で中心以外 → 枠内で自由に位置移動
     }else if(sameGroup && onCenter){
@@ -1687,7 +2205,12 @@ function finishDrop(e){
       return;
     }
   }else if(name === "battle" && ctx.kind === "stacktop"){
-    moveOwnStack(e);
+    const selfSt = findStack(ctx.stackId);
+    if(selfSt && selfSt.groupId){ moveOwnStack(e); }           // リンク中は全体移動
+    else if(selfSt && selfSt.cardIds.length >= 2 && (selfSt.moveMode||"single") === "single"){
+      detachTopCard(e, ctx.stackId);                            // 個別モード＝一番上分離
+    }
+    else moveOwnStack(e);                                        // まとめて/1枚＝全体移動
   }else if(name === "shieldstack"){
     const sh = findShield(dropEl.dataset.shield);
     if(sh){
@@ -1697,19 +2220,29 @@ function finishDrop(e){
       sh.cardIds.unshift(...ids);
     }
   }else if(name === "deckinsert"){
-    // 山札の山にドロップ → 「上からx枚目に戻す」モーダルを表示
-    const ids = takeFromSource(ctx);
-    if(ids.length){ openDeckInsert(ids); }
+    // まとめてモードで2枚以上の重ねを山札へ → 順番選択メニュー
+    if(ctx.kind === "stacktop"){
+      const sst = findStack(ctx.stackId);
+      if(sst && sst.cardIds.length >= 2 && (sst.moveMode||"bulk") === "bulk" && !sst.groupId){
+        cleanupDrag(); renderAll();   // ドラッグ中の半透明表示を解消してからメニュー
+        openBulkDeckMenu(ctx.stackId); return;
+      }
+    }
+    // 1枚 → 「上からx枚目に戻す」モーダル（取り出しは配置確定時に行う＝やめるで元の状態維持）
+    cleanupDrag(); renderAll();        // ドラッグ中の半透明表示を解消してからメニュー
+    openDeckInsert(ctx);
     return;
   }else{
     const ids = takeFromSource(ctx);
-    dropTo(ids, name, e);
+    dropTo(ids, name, e, ctx);
   }
   renderAll();
 }
 /* 山札の任意の位置（上からx枚目）にカードを戻すモーダル */
-function openDeckInsert(ids){
-  const total = Z.deck.length + ids.length;
+function openDeckInsert(ctx){
+  // この時点ではカードを取り出さない。配置を確定したときだけ takeFromSource する。
+  // → 「やめる」や枠外タップでは何もせず、直前の状態がそのまま維持される。
+  const total = Z.deck.length + 1; // 1枚戻す想定
   openModal(`<h2>山札に戻す</h2>
     <div style="font-size:12px;color:var(--sub)">上から何枚目に戻しますか？（1〜${total}）</div>
     <div class="btn-grid" style="align-items:center">
@@ -1724,7 +2257,8 @@ function openDeckInsert(ids){
       <button id="diCancel">やめる</button>
     </div>`);
   const place = (pos)=>{
-    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; cards[id].sideways=false; }
+    const ids = takeFromSource(ctx); // ここで初めて取り出す
+    for(const id of ids){ if(cards[id]){ cards[id].faceUp=false; cards[id].tapped=false; cards[id].sideways=false; } }
     const idx = Math.max(0, Math.min(Z.deck.length, pos));
     Z.deck.splice(idx, 0, ...ids);
     closeModal(); renderAll();
@@ -1736,12 +2270,20 @@ function openDeckInsert(ids){
   };
   $("#diTop").onclick = ()=> place(0);
   $("#diBottom").onclick = ()=> place(Z.deck.length);
-  $("#diCancel").onclick = ()=>{
-    // やめる：取り出したカードは山札の一番上に戻す（紛失防止）
-    for(const id of ids){ cards[id].faceUp=false; cards[id].tapped=false; cards[id].sideways=false; }
-    Z.deck.unshift(...ids);
-    closeModal(); renderAll();
-  };
+  $("#diCancel").onclick = ()=>{ closeModal(); }; // やめる：何もしない＝直前の状態を維持
+}
+/* 重ねスタックの一番上1枚だけを分離して、ドロップ位置へ単独で置く。
+   残りはそのまま連なり、新たな一番上(次の番号)が繰り上がる。 */
+function detachTopCard(e, stackId){
+  const st = findStack(stackId);
+  if(!st || st.cardIds.length < 2) { moveOwnStack(e); return; } // 1枚なら通常移動
+  const rect = $("#battleZone").getBoundingClientRect();
+  const cw = parseInt(sizeRange.value,10), ch = Math.round(cw*1.4);
+  const px = Math.max(0, Math.min(rect.width-cw-4, e.clientX - rect.left - cw/2));
+  const py = Math.max(0, Math.min(rect.height-ch-4, e.clientY - rect.top - cw*0.7));
+  const topId = st.cardIds.shift();   // 一番上を取り出す（残りが繰り上がる）
+  addStack([topId], px, py);          // 単独カードとして配置
+  renderAll();
 }
 function moveOwnStack(e){
   const st = findStack(drag.ctx.stackId);
@@ -1767,9 +2309,11 @@ function moveOwnStack(e){
     });
     const baseX = anchor.x - (anchor.gx||0);
     const baseY = anchor.y - (anchor.gy||0);
-    const margin = cw * 2; // この余白以内なら「枠内」とみなす（広めにとって離脱しにくく）
-    const inside = (px >= baseX+minX-margin && px <= baseX+maxX+margin &&
-                    py >= baseY+minY-margin && py <= baseY+maxY+margin);
+    // カード矩形(px..px+cw, py..py+ch)が枠矩形と少しでも重なれば「枠内」、
+    // 完全に枠外（全く重ならない）なら離脱する
+    const cardL = px, cardR = px + cw, cardT = py, cardB = py + ch;
+    const frmL = baseX+minX, frmR = baseX+maxX, frmT = baseY+minY, frmB = baseY+maxY;
+    const inside = !(cardR < frmL || cardL > frmR || cardB < frmT || cardT > frmB);
     if(inside){
       // グループ内で位置だけ変更（gx/gyを更新）→ L字などが作れる
       let ngx = Math.round(px - baseX);
@@ -1791,12 +2335,26 @@ function moveOwnStack(e){
       return;
     }
     // 枠外 → 離脱して単独に
+    const wasStackNum = !!st.seq; // 重ねグループだったか
+    // 残るメンバーの画面位置を保つため、離脱前の基準(baseX/baseY)で残りメンバーの実座標を確定
+    const restBefore = members.filter(m=>m!==st);
+    if(restBefore.length){
+      const nb = restBefore[0];
+      const nbX = baseX + (nb.gx||0), nbY = baseY + (nb.gy||0);
+      // 各メンバーのgxをnb基準に振り直し、実座標は全員nbの位置に統一（描画は先頭x,y＋gx/gy）
+      const ngx0 = nb.gx||0, ngy0 = nb.gy||0;
+      restBefore.forEach(m=>{ m.gx = (m.gx||0) - ngx0; m.gy = (m.gy||0) - ngy0; m.x = nbX; m.y = nbY; });
+    }
     st.groupId = null; st.groupLayout = null;
-    st.gx = null; st.gy = null;
+    st.gx = null; st.gy = null; st.seq = null;
     st.x = Math.max(0, Math.min(rect.width-cw-4, px));
     st.y = Math.max(0, Math.min(rect.height-ch-4, py));
     const rest = Z.battle.filter(s=>s.groupId===gid);
-    if(rest.length === 1){ rest[0].groupId = null; rest[0].groupLayout = null; rest[0].gx=null; rest[0].gy=null; }
+    if(rest.length === 1){ rest[0].groupId = null; rest[0].groupLayout = null; rest[0].gx=null; rest[0].gy=null; rest[0].seq=null; }
+    else {
+      if(wasStackNum){ resequenceStack(gid); } // 重ねは番号を繰り下げて振り直す
+      else { compactLinkLine(gid, cw, ch); }   // リンクが一列なら詰めて再構成
+    }
     Z.battle = Z.battle.filter(s=>s!==st); Z.battle.push(st);
     return;
   }
@@ -1823,6 +2381,8 @@ function handleTap(ctx){
   }
 }
 function onSingleTap(ctx){
+  // 何かにタッチしたら、シールドの点線ハイライトを消す
+  if(_justPlacedShield !== null){ _justPlacedShield = null; renderShields(); }
   // 複数選択モード中は、カードを選択/選択解除（山は対象外）
   if(multiSelectMode){
     if(ctx.cardId && cards[ctx.cardId]){
@@ -1841,7 +2401,17 @@ function onSingleTap(ctx){
   if(ctx.kind === "shieldstack"){ openShieldTapMenu(ctx.shieldId); return; }
   // それ以外のカードは1回クリックでタップ／アンタップ
   const c = cards[ctx.cardId];
-  if(c){ c.tapped = !c.tapped; renderAll(); }
+  if(!c) return;
+  // 重ねスタック（stacktop/under）の場合は、構成カード全部のタップ状態を一致させる
+  if((ctx.kind === "stacktop" || ctx.kind === "under") && ctx.stackId){
+    const st = findStack(ctx.stackId);
+    if(st && st.cardIds.length >= 2){
+      const next = !c.tapped;             // タップしたカードの反対状態に全員を揃える
+      st.cardIds.forEach(id=>{ if(cards[id]) cards[id].tapped = next; });
+      renderAll(); return;
+    }
+  }
+  c.tapped = !c.tapped; renderAll();
 }
 /* シールドを1回タップしたときのメニュー */
 function openShieldTapMenu(shieldId){
@@ -1854,6 +2424,7 @@ function openShieldTapMenu(shieldId){
     <div class="btn-grid">
       <button id="shTap">${top && top.tapped ? "アンタップ" : "タップ"}</button>
       <button id="shCompose">構成する</button>
+      <button id="shHighlight">${sh.highlight ? "目立たせる／戻す（戻す）" : "目立たせる／戻す"}</button>
       <button id="shCloseMenu">閉じる</button>
     </div>`);
   $("#shTap").onclick = ()=>{
@@ -1862,6 +2433,10 @@ function openShieldTapMenu(shieldId){
     renderAll(); closeModal();
   };
   $("#shCompose").onclick = ()=> openShieldCompose(shieldId);
+  $("#shHighlight").onclick = ()=>{
+    sh.highlight = !sh.highlight;   // 目立たせ状態をトグル（挙動は通常のシールドと同じ）
+    renderAll(); closeModal();
+  };
   $("#shCloseMenu").onclick = closeModal;
 }
 /* 「構成する」ウィンドウ：シールド内カードをオブジェクトとして表示・編集 */
@@ -1869,17 +2444,75 @@ function openShieldCompose(shieldId){
   const sh = findShield(shieldId);
   if(!sh){ closeModal(); return; }
   openModal(`<h2>シールドを構成</h2>
-    <div style="font-size:11px;color:var(--sub)">左が一番上です。カードをタップすると、移動・表裏・タップを編集できます（バトルゾーンと同じ操作）。</div>
+    <div style="font-size:11px;color:var(--sub)">左が一番上です。<b>1回タップ</b>でメニュー／<b>ドラッグ</b>で順番入替／<b>ダブルタップ</b>で表裏。</div>
     <div class="modal-cards" id="composeCards"></div>
     <div class="btn-grid"><button id="composeClose">閉じる</button></div>`);
   const grid = $("#composeCards");
   // 裏向きは裏のまま、表向きは表向きで表示（staticCardElがfaceUpを反映）
-  for(const id of sh.cardIds){
+  sh.cardIds.forEach((id, idx)=>{
     const el = staticCardEl(id);
-    el.style.cursor = "pointer";
-    el.onclick = ()=> openShieldCardActions(shieldId, id, "compose");
+    el.style.cursor = "grab";
+    el.dataset.cid = id;
+    let pd = null; // pointerdown情報
+    let moved = false;
+    let lastClick = 0;
+    el.addEventListener("pointerdown", e=>{
+      e.preventDefault();
+      pd = {x:e.clientX, y:e.clientY, pid:e.pointerId};
+      moved = false;
+      try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    el.addEventListener("pointermove", e=>{
+      if(!pd) return;
+      if(!moved && Math.hypot(e.clientX-pd.x, e.clientY-pd.y) > 8){ moved = true; el.style.opacity = ".5"; }
+    });
+    el.addEventListener("pointerup", e=>{
+      if(!pd){ return; }
+      try{ el.releasePointerCapture(pd.pid); }catch(_){}
+      el.style.opacity = "";
+      if(moved){
+        // ドラッグ＝指を離した位置のカードと入替（移動元は一時的に判定対象外に）
+        const savedPE = el.style.pointerEvents;
+        el.style.pointerEvents = "none";
+        const tgt = document.elementFromPoint(e.clientX, e.clientY);
+        el.style.pointerEvents = savedPE;
+        const tgtEl = tgt && tgt.closest ? tgt.closest("[data-cid]") : null;
+        const sh2 = findShield(shieldId);
+        if(tgtEl && sh2){
+          const dstId = tgtEl.dataset.cid;
+          if(dstId && dstId !== id){
+            const from = sh2.cardIds.indexOf(id);
+            const to = sh2.cardIds.indexOf(dstId);
+            if(from >= 0 && to >= 0){
+              sh2.cardIds.splice(from, 1);
+              sh2.cardIds.splice(to, 0, id);
+            }
+          }
+        }
+        pd = null; moved = false;
+        renderAll(); openShieldCompose(shieldId);
+        return;
+      }
+      // 動かさず離した＝タップ。ダブルタップ判定
+      pd = null;
+      const now = Date.now();
+      if(now - lastClick < 280){
+        lastClick = 0;
+        if(cards[id]) cards[id].faceUp = !cards[id].faceUp; // ダブルタップ＝表裏
+        renderAll(); openShieldCompose(shieldId);
+      } else {
+        lastClick = now;
+        setTimeout(()=>{
+          if(lastClick && Date.now()-lastClick >= 280){
+            lastClick = 0;
+            openShieldCardActions(shieldId, id, "compose"); // 1回タップ＝メニュー
+          }
+        }, 290);
+      }
+    });
+    el.addEventListener("pointercancel", ()=>{ pd=null; moved=false; el.style.opacity=""; });
     grid.appendChild(el);
-  }
+  });
   $("#composeClose").onclick = closeModal;
 }
 function onDoubleTap(ctx){
@@ -1946,10 +2579,17 @@ function onLongPress(ctx){
 const overlay = $("#overlay");
 const modal = $("#modal");
 function openModal(html){
+  // 前のモーダルに未処理のキャンセル後始末が残っていたら実行（カード紛失防止）
+  if(_modalCloseCb){ const cb=_modalCloseCb; _modalCloseCb=null; try{ cb(); }catch(_){ } }
   modal.innerHTML = html;
   overlay.classList.add("show");
 }
-function closeModal(){ overlay.classList.remove("show"); modal.innerHTML=""; }
+let _modalCloseCb = null; // モーダルが閉じられる際に一度だけ呼ぶ後始末（枠外タップ含む）
+function closeModal(){
+  const cb = _modalCloseCb; _modalCloseCb = null;
+  overlay.classList.remove("show"); modal.innerHTML="";
+  if(cb){ try{ cb(); }catch(_){ } }
+}
 
 /* ===== 利用規約モーダル ===== */
 function openTerms(){
@@ -1974,6 +2614,21 @@ function openTerms(){
   $("#termsClose").onclick = closeModal;
 }
 overlay.addEventListener("pointerdown", e=>{ if(e.target===overlay) closeModal(); });
+
+// 【フリーズ防止の保険】カードのDOMが再描画で消えるなどで pointerup/cancel が
+// 元要素に届かず drag が残り続けると、以降の操作が無反応になる。
+// document 全体で指が離れたら、drag が残っていた場合に確実に解除する。
+document.addEventListener("pointerup", ()=>{
+  if(drag){
+    try{ clearTimeout(drag.longTimer); }catch(_){}
+    // 移動中だった場合も、ここに来る＝通常の pointerup が処理されなかったケースなので
+    // 状態だけ安全に解除して再描画（位置確定はしない＝紛失や暴走を防ぐ）
+    setTimeout(()=>{ if(drag){ cleanupDrag(); renderAll(); } }, 0);
+  }
+}, true);
+document.addEventListener("pointercancel", ()=>{
+  if(drag){ try{ clearTimeout(drag.longTimer); }catch(_){} cleanupDrag(); renderAll(); }
+}, true);
 
 function zoneNameJa(ctx){
   if(ctx.kind==="stacktop"||ctx.kind==="under") return "バトルゾーン";
@@ -2067,7 +2722,6 @@ function openShieldCardActions(shieldId, id, backTo){
       ? (c.text ? escapeHtml(c.text) : "（カードテキスト未登録）")
       : "表は見えていません。"}</div>
     <div class="btn-grid">
-      ${c.faceUp ? "" : '<button id="sPeek">こっそり見る</button>'}
       <button id="sFlip">表/裏</button>
       <button id="sTap">${c.tapped ? "アンタップ" : "タップ"}</button>
       ${isTop ? "" : '<button id="sToTop">一番上にする</button>'}
@@ -2077,11 +2731,6 @@ function openShieldCardActions(shieldId, id, backTo){
       <button data-go="battle">バトルへ</button>
       <button id="sBack">戻る</button>
     </div>`);
-  const peek = $("#sPeek");
-  if(peek) peek.onclick = ()=>{
-    $("#modal h2").textContent = c.name;
-    $("#modal .cardtext").textContent = c.text || "（カードテキスト未登録）";
-  };
   $("#sFlip").onclick = ()=>{ c.faceUp = !c.faceUp; renderAll(); back(); };
   $("#sTap").onclick = ()=>{ c.tapped = !c.tapped; renderAll(); back(); };
   const toTop = $("#sToTop");
@@ -2158,8 +2807,9 @@ function openDeckMenu(){
       <button id="dShuffle">シャッフル</button>
       <button id="dViewAll">すべて見る</button>
     </div>
-    <div class="btn-grid">
-      <button id="dPeek">上から見ていく</button>
+    <div class="btn-grid" style="align-items:center">
+      <span style="font-size:12px">上から1枚ずつめくって</span>
+      <button id="dPeek">見る</button>
     </div>
     <div class="btn-grid" style="align-items:center">
       <span style="font-size:12px">下から</span>
@@ -2249,6 +2899,8 @@ function openDeckPeek(){
         <button class="small" data-act="hand">手札</button>
         <button class="small" data-act="mana">マナ</button>
         <button class="small" data-act="grave">墓地</button>
+        <button class="small" data-act="shield">盾</button>
+        <button class="small" data-act="battle">場</button>
         <button class="small" data-act="deckbottom">下へ</button>
       </div>`;
     });
@@ -2277,7 +2929,7 @@ function openDeckPeek(){
         if(i>=0){
           Z.deck.splice(i,1);
           if(i < shown) shown--; // 表示済みのカードが抜けたらカウントを詰める
-          dropTo([id], b.dataset.act, {clientX:0,clientY:0});
+          moveDeckCardToZone(id, b.dataset.act);
           render();
         }
       };
@@ -2316,6 +2968,8 @@ function openDeckViewer(n, fromBottom){
       <button class="small" data-act="hand">手札</button>
       <button class="small" data-act="mana">マナ</button>
       <button class="small" data-act="grave">墓地</button>
+      <button class="small" data-act="shield">盾</button>
+      <button class="small" data-act="battle">場</button>
       <button class="small" data-act="deckbottom">下へ</button>
     </div>`;
   });
@@ -2332,7 +2986,7 @@ function openDeckViewer(n, fromBottom){
       const i = Z.deck.indexOf(id);
       if(i>=0){
         Z.deck.splice(i,1);
-        dropTo([id], b.dataset.act, {clientX:0,clientY:0});
+        moveDeckCardToZone(id, b.dataset.act);
         row.remove();
         renderAll();
       }
@@ -2351,8 +3005,9 @@ $("#btnShuffle").onclick = ()=>{ shuffle(Z.deck); renderAll(); };
 $("#btnDraw").onclick = draw;
 $("#btnMana").onclick = manaCharge;
 $("#btnToGrave").onclick = deckToGrave;
+$("#btnToShield").onclick = deckToShield;
 $("#btnGR").onclick = grSummon;
-$("#btnViewDeck").onclick = openDeckMenu;
+$("#btnViewDeck").onclick = openDeckPeek;
 
 /* ===== 複数枚選択モード ===== */
 let multiSelectMode = false;
@@ -2947,10 +3602,22 @@ function renderSavedList(){
   });
   box.querySelectorAll("[data-del]").forEach(b=>{
     b.onclick = ()=>{
-      const d = loadDecks();
-      delete d[b.dataset.del];
-      storeDecks(d);
-      renderSavedList();
+      const name = b.dataset.del;
+      openModal(`<h2>デッキの削除</h2>
+        <div style="font-size:13px;margin:4px 0 2px">「${escapeHtml(name)}」を本当に削除しますか？</div>
+        <div style="font-size:11px;color:var(--sub)">この操作は取り消せません。</div>
+        <div class="btn-grid">
+          <button id="delYes" style="background:#ff6060;color:#fff">削除する</button>
+          <button id="delNo">やめる</button>
+        </div>`);
+      $("#delYes").onclick = ()=>{
+        const d = loadDecks();
+        delete d[name];
+        storeDecks(d);
+        closeModal();
+        renderSavedList();
+      };
+      $("#delNo").onclick = closeModal;
     };
   });
 }
