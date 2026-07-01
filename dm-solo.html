@@ -3,7 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>DM 一人回しシミュレーター</title>
+<title>デュエマ 一人回しツール｜デュエル・マスターズ 一人回しシミュレーター</title>
+<meta name="description" content="デュエマ（デュエル・マスターズ）の一人回しがブラウザでできる無料シミュレーター。デッキを登録して、ドロー・マナ・シールド・バトルゾーンを実際のプレイ感覚で一人回しできます。">
+<meta name="keywords" content="デュエマ 一人回し,デュエル・マスターズ 一人回し,デュエマ 一人回しツール,デュエル・マスターズ 一人回しツール,デュエマ シミュレーター,一人回し,デッキ回し,デュエマ ソリティア">
+<meta name="robots" content="index,follow">
+<meta name="format-detection" content="telephone=no">
+<link rel="canonical" href="https://dm-solotool.github.io/dm-solo/dm-solo.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="デュエマ 一人回しツール｜デュエル・マスターズ 一人回しシミュレーター">
+<meta property="og:description" content="デュエマ（デュエル・マスターズ）の一人回しがブラウザでできる無料シミュレーター。デッキを登録して一人回しでプレイ感覚を試せます。">
+<meta property="og:url" content="https://dm-solotool.github.io/dm-solo/dm-solo.html">
+<meta property="og:site_name" content="デュエマ 一人回しツール">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="デュエマ 一人回しツール｜デュエル・マスターズ 一人回しシミュレーター">
+<meta name="twitter:description" content="デュエマ（デュエル・マスターズ）の一人回しがブラウザでできる無料シミュレーター。">
 <style>
   :root{
     --bg:#0e1726;
@@ -269,6 +282,29 @@
     border:1px solid var(--line); border-radius:6px; padding:5px;
   }
 
+  /* ===== デッキ入力画面 紹介文 ===== */
+  .site-title{
+    color:#ffffff; font-weight:800;
+    font-size:20px; line-height:1.5; letter-spacing:.04em;
+    margin:2px 0 8px;
+  }
+  .intro-box{ margin:2px 0 14px; }
+  .intro-catch{
+    color:#ffe14d; font-weight:800;
+    font-size:20px; line-height:1.5; letter-spacing:.02em;
+    margin-bottom:10px;
+  }
+  .intro-emph{
+    -webkit-text-emphasis:dot; text-emphasis:dot;      /* 文字の上に強調の・ */
+    -webkit-text-emphasis-position:over; text-emphasis-position:over;
+  }
+  .intro-list{
+    margin:0; padding-left:1.1em; list-style:disc;
+    font-size:12px; line-height:1.7; color:var(--txt);
+  }
+  .intro-list li{ margin-bottom:6px; }
+  .intro-list b{ color:var(--txt); }
+
   /* ===== デッキ入力画面 ===== */
   #setup{
     position:fixed; inset:0; z-index:1100;
@@ -401,9 +437,13 @@
 </style>
 </head>
 <body>
+<noscript>
+  <h2>デュエマ 一人回しツール（デュエル・マスターズ 一人回しシミュレーター）</h2>
+  <p>このページは、デュエル・マスターズ（デュエマ）の「一人回し」をブラウザ上で行える無料シミュレーターです。デッキを登録して、ドロー・マナチャージ・シールド・バトルゾーンなどを実際のプレイ感覚で一人回しできます。ご利用にはJavaScriptを有効にしてください。</p>
+</noscript>
 
 <header>
-  <h1>DM 一人回し</h1>
+  <h1>デュエマ 一人回しツール</h1>
   <button class="primary" id="btnSetup2">初期配置</button>
   <button id="btnShuffle">シャッフル</button>
   <button id="btnDraw">ドロー</button>
@@ -471,6 +511,19 @@
 </div>
 
 <div id="setup" class="show">
+  <div class="site-title">DMソロ</div>
+  <div class="intro-box">
+    <div class="intro-catch"><span class="intro-emph">最も紙に近い</span>デュエマ一人回しツール</div>
+    <ul class="intro-list">
+      <li><b>公式デッキリストPDFを読み取り！</b></li>
+      <li><b>枚数と文明カウントで手入力でも楽々♪</b><br>カード名は自由入力！</li>
+      <li><b>直感的でスムーズなカード操作！</b><br>ワンクリックでタップ/アンタップ、ダブルクリックで表/裏切り替え。</li>
+      <li><b>長押しでネット検索も！</b></li>
+      <li><b>カードの大きさ調整可能！</b></li>
+      <li><b>重ねた下のカードが一目瞭然！</b><br>まとめて/一枚だけ移動の両モードをワンクリックで切り替え！</li>
+      <li><b>リンクにも対応。ドルマゲドンも作れる！</b></li>
+    </ul>
+  </div>
   <h2>デッキを入力</h2>
   <div class="note" style="margin:8px 0">
     <b>ファイルから読み込む</b>（CSV/TXT は通信不要。PDF/画像は文字認識で読み取り）<br>
