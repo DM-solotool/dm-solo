@@ -992,6 +992,7 @@ function moveDeckCardToZone(id, act){
   } else {
     dropTo([id], act, {clientX:0,clientY:0});
   }
+  renderAll(); // 移動した時点でゾーンを再描画（枠外タップで閉じても表示済みにする）
 }
 function dropTo(ids, dropName, ev, srcCtx){
   if(!ids.length) return;
