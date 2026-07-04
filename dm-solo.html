@@ -4026,6 +4026,58 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
 document.addEventListener("contextmenu", e=> e.preventDefault());
 renderAll();
+
+/* ================================================================
+   盤面の自動保存・復元
+   スマホで長押し検索の新しいタブへ移った間に元のタブが再読み込みされても、
+   一人回しの盤面が消えないよう、状態を sessionStorage に自動保存して復元する。
+   （sessionStorage は同じタブ内でのみ有効。タブを閉じれば消える）
+================================================================ */
+const BOARD_SAVE_KEY = "dmSoloBoard_v1";
+function saveBoardState(){
+  try{
+    const setup = document.getElementById("setup");
+    if(!setup || setup.classList.contains("show")) return; // 一人回し中のみ保存
+    const data = {
+      cards, Z, nextId, nextStackId, nextShieldId,
+      deckList, deckArt, currentStartPreset,
+      cardSize: sizeRange.value
+    };
+    sessionStorage.setItem(BOARD_SAVE_KEY, JSON.stringify(data));
+  }catch(_){ /* 容量超過などで保存できない場合は何もしない（動作に影響させない） */ }
+}
+function restoreBoardState(){
+  try{
+    const raw = sessionStorage.getItem(BOARD_SAVE_KEY);
+    if(!raw) return;
+    const d = JSON.parse(raw);
+    if(!d || !d.Z || !d.cards) return;
+    cards = d.cards; Z = d.Z;
+    nextId = d.nextId || nextId;
+    nextStackId = d.nextStackId || nextStackId;
+    nextShieldId = d.nextShieldId || nextShieldId;
+    if(d.deckList) deckList = d.deckList;
+    if(d.deckArt) deckArt = d.deckArt;
+    if(typeof d.currentStartPreset === "number") currentStartPreset = d.currentStartPreset;
+    if(d.cardSize){
+      sizeRange.value = d.cardSize;
+      _lastCardSize = parseInt(d.cardSize,10); // gx/gyは保存時サイズのままなのでスケールさせない
+      applySize();
+    }
+    $("#setup").classList.remove("show"); // デッキ入力画面を閉じて盤面へ
+    renderAll();
+  }catch(_){ /* 復元に失敗した場合は通常どおりデッキ入力画面から */ }
+}
+// renderAll のたびに自動保存（既存の renderAll には手を加えず外側から包む）
+{
+  const _renderAllOrig = renderAll;
+  renderAll = function(){ _renderAllOrig(); saveBoardState(); };
+}
+// タブが裏に回る・閉じる直前にも保存（取りこぼし防止）
+window.addEventListener("pagehide", saveBoardState);
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "hidden") saveBoardState(); });
+// ページ読み込み時：保存データがあれば盤面を復元
+restoreBoardState();
 </script>
 </body>
 </html>
